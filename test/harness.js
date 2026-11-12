@@ -24,6 +24,7 @@ const SCRIPTS = [
   'incidents.js',
   'timelog.js',
   'releases.js',
+  'queries.js',
   'briefing.js',
   'dashboard.js',
   'rightpanel.js',
@@ -48,6 +49,7 @@ function createEnv(opts = {}) {
     <div id="top-new-incident"></div>
     <div id="top-new-log"></div>
     <div id="top-new-release"></div>
+    <div id="top-new-query"></div>
     <div id="btn-briefing"></div>
     <div id="btn-projects"></div>
     <div id="btn-export"></div>
@@ -151,6 +153,7 @@ function createEnv(opts = {}) {
     Incidents: win.OpsDesk.Incidents,
     TimeLog: win.OpsDesk.TimeLog,
     Releases: win.OpsDesk.Releases,
+    Queries: win.OpsDesk.Queries,
     Briefing: win.OpsDesk.Briefing,
     Dashboard: win.OpsDesk.Dashboard,
     /** 清理环境（IndexedDB 连接 + 定时器） */

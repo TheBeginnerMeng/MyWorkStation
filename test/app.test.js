@@ -23,7 +23,7 @@ test('外壳：视图路由应切换并更新导航激活态', async () => {
   const env = await createSeededEnv();
   try {
     const { App } = env.OpsDesk;
-    ['tasks', 'incidents', 'timelog', 'releases', 'briefing', 'dashboard'].forEach((v) => {
+    ['tasks', 'incidents', 'timelog', 'releases', 'queries', 'briefing', 'dashboard'].forEach((v) => {
       App.go(v);
       assert.equal(App.activeView, v, `路由未切换到 ${v}`);
       const nav = env.document.querySelector(`.nav-item[data-view="${v}"]`);
@@ -34,14 +34,14 @@ test('外壳：视图路由应切换并更新导航激活态', async () => {
   }
 });
 
-test('外壳：导航项应覆盖全部六个视图', async () => {
+test('外壳：导航项应覆盖全部七个视图', async () => {
   const env = await createSeededEnv();
   try {
     env.OpsDesk.App.go('dashboard');
     const items = env.document.querySelectorAll('.nav-item[data-view]');
-    assert.equal(items.length, 6, '导航项数量不符');
+    assert.equal(items.length, 7, '导航项数量不符');
     const views = Array.from(items).map((i) => i.dataset.view);
-    assert.deepEqual(views, ['dashboard', 'tasks', 'incidents', 'timelog', 'releases', 'briefing']);
+    assert.deepEqual(views, ['dashboard', 'tasks', 'incidents', 'timelog', 'releases', 'queries', 'briefing']);
   } finally {
     env.cleanup();
   }
@@ -60,7 +60,9 @@ test('外壳：数字键快捷键应切换视图', async () => {
     key(env, '5');
     assert.equal(env.OpsDesk.App.activeView, 'releases', '按 5 未切到版本投产视图');
     key(env, '6');
-    assert.equal(env.OpsDesk.App.activeView, 'briefing', '按 6 未切到简报视图');
+    assert.equal(env.OpsDesk.App.activeView, 'queries', '按 6 未切到取数登记视图');
+    key(env, '7');
+    assert.equal(env.OpsDesk.App.activeView, 'briefing', '按 7 未切到简报视图');
     key(env, '1');
     assert.equal(env.OpsDesk.App.activeView, 'dashboard', '按 1 未切回总览');
   } finally {
@@ -87,6 +89,13 @@ test('外壳：字母快捷键 N / I / T 应打开对应弹窗', async () => {
     modal = env.document.querySelector('#modal-host .panel');
     assert.ok(modal, '按 T 未打开流水弹窗');
     assert.ok(/记录时间段/.test(modal.textContent), '弹窗不是流水弹窗');
+    env.OpsDesk.UI.closeTopModal();
+
+    key(env, 'q');
+    modal = env.document.querySelector('#modal-host .panel');
+    assert.ok(modal, '按 Q 未打开取数弹窗');
+    assert.ok(/新建取数单/.test(modal.textContent), '弹窗不是取数单弹窗');
+    assert.equal(env.OpsDesk.App.activeView, 'queries', '按 Q 未跳到取数登记视图');
     env.OpsDesk.UI.closeTopModal();
   } finally {
     env.cleanup();
@@ -268,6 +277,11 @@ test('右栏：应随视图切换输出对应摘要', async () => {
     env.OpsDesk.RightPanel.render();
     out = env.document.getElementById('right-output').textContent;
     assert.ok(/今日任务清单/.test(out), '任务视图右栏内容不符');
+
+    env.OpsDesk.App.go('queries');
+    env.OpsDesk.RightPanel.render();
+    out = env.document.getElementById('right-output').textContent;
+    assert.ok(/取数登记台账/.test(out), '取数视图右栏内容不符');
   } finally {
     env.cleanup();
   }

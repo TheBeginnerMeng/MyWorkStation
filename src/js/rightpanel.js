@@ -76,6 +76,29 @@
         return mdR.join('\n');
       }
 
+      case 'queries': {
+        var qs = (s.queries || []).slice().sort(function (a, b) {
+          return (b.requestDate || '') < (a.requestDate || '') ? -1 : 1;
+        });
+        var qst = Store.queryStats();
+        var mdQ = ['### 取数登记台账', ''];
+        if (!qs.length) {
+          mdQ.push('- 暂无取数单记录');
+        }
+        qs.slice(0, 5).forEach(function (q) {
+          var qs2 = Store.dictItem('queryStatus', q.status);
+          mdQ.push('- **' + (q.code || '未编号') + '**（' + (q.requestDate || '未填日期') + '） — ' + qs2.label + ' · ' + (q.title || ''));
+          (q.metrics || []).slice(0, 3).forEach(function (m) {
+            mdQ.push('  - 口径 `' + m.name + '` — ' + U.trunc(m.definition || '', 40));
+          });
+          if ((q.caliberChanges || []).length) {
+            mdQ.push('  - 口径变更 **' + q.caliberChanges.length + '** 次');
+          }
+        });
+        mdQ.push('', '> 共 ' + qst.total + ' 单 / 进行中 ' + qst.inProgress + ' / 待核对 ' + qst.toCheck + ' / 已超期 ' + qst.overdue);
+        return mdQ.join('\n');
+      }
+
       case 'briefing': {
         var md4 = global.OpsDesk.Briefing.markdown;
         if (!md4) {

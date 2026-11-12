@@ -816,7 +816,8 @@
         UI.bars(
           st.byType.map(function (b) {
             return { label: b.icon + ' ' + b.label, value: b.count, color: b.color };
-          })
+          }),
+          { unit: 'count' }
         ),
       ])
     );

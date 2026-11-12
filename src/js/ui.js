@@ -229,7 +229,14 @@
 
   /* ---------------- Bar (横向占比条) ---------------- */
 
-  UI.bars = function (buckets) {
+  /**
+   * 渲染横向占比条
+   * @param {Array} buckets [{label, value, color}]
+   * @param {Object} opts {unit:'count'} —— 计数场景不显示时长，默认按分钟显示
+   */
+  UI.bars = function (buckets, opts) {
+    opts = opts || {};
+    var isCount = opts.unit === 'count';
     var wrap = U.el('div', { class: 'space-y-2.5' });
     var total = U.sum(buckets, function (b) {
       return b.value;
@@ -244,7 +251,7 @@
             U.el('span', { text: b.label }),
           ]),
           U.el('span', { class: 'num text-mute' }, [
-            U.fmtDur(b.value) + ' · ' + pct + '%',
+            (isCount ? b.value : U.fmtDur(b.value)) + ' · ' + pct + '%',
           ]),
         ])
       );

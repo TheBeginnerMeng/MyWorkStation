@@ -337,6 +337,79 @@
     });
     relPanel.appendChild(relBody);
 
+    /* ---- 取数概览 ---- */
+    var qryStats = Store.queryStats();
+    var qryPanel = U.el('div', { class: 'panel' });
+    qryPanel.appendChild(
+      U.el('div', { class: 'panel-head' }, [
+        U.el('div', { class: 'panel-title', text: '取数登记概览' }),
+        U.el('button', {
+          class: 'btn h-7 px-2.5 text-[11px]',
+          onclick: function () { global.OpsDesk.App.go('queries'); },
+        }, ['查看全部 →']),
+      ])
+    );
+    var qryBody = U.el('div', { class: 'divide-y divide-line/40' });
+    var recentQry = (s.queries || [])
+      .slice()
+      .sort(function (a, b) {
+        return (b.requestDate || '') < (a.requestDate || '') ? -1 : 1;
+      })
+      .slice(0, 4);
+    if (!recentQry.length) {
+      qryBody.appendChild(
+        U.el('div', { class: 'px-4 py-5 text-center text-[13px] text-mute', text: '还没有取数单记录' })
+      );
+    }
+    recentQry.forEach(function (q) {
+      var stt = Store.dictItem('queryStatus', q.status);
+      var prb = Store.dictItem('queryPriority', q.priority);
+      var caliberCount = (q.caliberChanges || []).length;
+
+      qryBody.appendChild(
+        U.el('div', {
+          class: 'flex cursor-pointer items-start gap-3 px-4 py-2.5 row-hover',
+          onclick: function () { global.OpsDesk.App.go('queries'); },
+        }, [
+          U.el('div', { class: 'min-w-0 flex-1' }, [
+            U.el('div', { class: 'flex items-center gap-2' }, [
+              U.el('span', { class: 'num text-[12.5px] font-semibold text-ink', text: q.code || '未编号' }),
+              U.el('span', { class: 'truncate text-[11.5px] text-dim', text: q.title || '' }),
+            ]),
+            U.el('div', { class: 'mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-mute' }, [
+              U.el('span', { text: q.requester || '未填写需求方' }),
+              U.el('span', { text: '·' }),
+              U.el('span', { text: (q.metrics || []).length + ' 项口径' }),
+              caliberCount
+                ? U.el('span', { text: '· ' + caliberCount + ' 次口径变更' })
+                : null,
+            ]),
+          ]),
+          U.el('span', {
+            class: 'badge shrink-0',
+            style: { background: U.alpha(prb.color, 0.16), color: prb.color },
+            text: prb.label,
+          }),
+          U.el('span', {
+            class: 'badge shrink-0',
+            style: { background: U.alpha(stt.color, 0.16), color: stt.color },
+            text: stt.label,
+          }),
+        ])
+      );
+    });
+    qryPanel.appendChild(qryBody);
+    qryPanel.appendChild(
+      U.el('div', { class: 'border-t border-line/50 px-4 py-2.5' }, [
+        U.el('div', { class: 'flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-mute' }, [
+          U.el('span', { class: 'num', text: '共 ' + qryStats.total + ' 单' }),
+          U.el('span', { class: 'num', text: '进行中 ' + qryStats.inProgress }),
+          U.el('span', { class: 'num', text: '待核对 ' + qryStats.toCheck }),
+          U.el('span', { class: 'num', text: '已超期 ' + qryStats.overdue }),
+        ]),
+      ])
+    );
+
     root.innerHTML = '';
     root.appendChild(
       U.el('div', { class: 'space-y-4 animate-fade-up' }, [
@@ -355,6 +428,10 @@
               onclick: function () { global.OpsDesk.Releases.openEditor(null); },
             }, ['⧉ 记录投产']),
             U.el('button', {
+              class: 'btn',
+              onclick: function () { global.OpsDesk.Queries.openEditor(null); },
+            }, ['⊞ 登记取数']),
+            U.el('button', {
               class: 'btn btn-primary',
               onclick: function () {
                 var md = global.OpsDesk.Briefing.build();
@@ -366,7 +443,7 @@
         ]),
         kpis,
         U.el('div', { class: 'auto-cols auto-cols-wide' }, [
-          U.el('div', { class: 'space-y-4' }, [tlPanel, incPanel, relPanel]),
+          U.el('div', { class: 'space-y-4' }, [tlPanel, incPanel, relPanel, qryPanel]),
           U.el('div', { class: 'space-y-4' }, [focusPanel, logPanel, projPanel]),
         ]),
       ])

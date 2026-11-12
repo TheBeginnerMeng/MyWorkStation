@@ -250,7 +250,7 @@
         throw new Error('文件中未找到可用的状态数据');
       }
       // 状态必须至少具备一个可识别的业务字段，否则视为无效备份
-      var hasKnownField = ['tasks', 'incidents', 'timeLogs', 'projects', 'releases', 'settings'].some(function (k) {
+      var hasKnownField = ['tasks', 'incidents', 'timeLogs', 'projects', 'releases', 'queries', 'settings'].some(function (k) {
         return Object.prototype.hasOwnProperty.call(state, k);
       });
       if (!hasKnownField) {

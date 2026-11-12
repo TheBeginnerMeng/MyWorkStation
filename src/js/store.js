@@ -128,6 +128,12 @@
     })[0];
   }
 
+  function queryById(id) {
+    return (state.queries || []).filter(function (q) {
+      return q.id === id;
+    })[0];
+  }
+
   function dict(key) {
     return DICT[key] || [];
   }
@@ -258,6 +264,80 @@
     };
   }
 
+  /* ---------------- 取数登记统计 ---------------- */
+
+  /**
+   * 取数登记统计口径：
+   *   total      —— 取数单总数
+   *   inProgress —— 进行中（待评估 / 口径已确认 / 开发中）
+   *   delivered  —— 已交付（已交付 + 已核对归档）
+   *   toCheck    —— 待核对（已交付但尚未与产品核对）
+   *   checked    —— 已核对归档
+   *   overdue    —— 已过交付期且未归档（需要催办）
+   *   byStatus   —— 按状态分组计数
+   *   byPriority —— 按优先级分组计数
+   */
+  function queryStats() {
+    var list = state.queries || [];
+    var today = U.today();
+
+    var byStatus = DICT.queryStatus.map(function (s) {
+      return { key: s.key, label: s.label, badge: s.badge, color: s.color, count: 0 };
+    });
+    var statusMap = {};
+    byStatus.forEach(function (b) {
+      statusMap[b.key] = b;
+    });
+
+    var byPriority = DICT.queryPriority.map(function (p) {
+      return { key: p.key, label: p.label, color: p.color, count: 0 };
+    });
+    var prioMap = {};
+    byPriority.forEach(function (b) {
+      prioMap[b.key] = b;
+    });
+
+    list.forEach(function (q) {
+      var s = statusMap[q.status];
+      if (s) s.count += 1;
+      var p = prioMap[q.priority];
+      if (p) p.count += 1;
+    });
+
+    function countIn(keys) {
+      return list.filter(function (q) {
+        return keys.indexOf(q.status) >= 0;
+      }).length;
+    }
+
+    var closed = ['checked', 'cancelled'];
+
+    return {
+      total: list.length,
+      inProgress: countIn(['pending_eval', 'caliber_confirmed', 'developing']),
+      delivered: countIn(['delivered', 'checked']),
+      toCheck: countIn(['delivered']),
+      checked: countIn(['checked']),
+      overdue: list.filter(function (q) {
+        return q.dueDate && q.dueDate < today && closed.indexOf(q.status) < 0;
+      }).length,
+      metrics: U.sum(list, function (q) {
+        return (q.metrics || []).length;
+      }),
+      channels: U.sum(list, function (q) {
+        return (q.channels || []).length;
+      }),
+      checks: U.sum(list, function (q) {
+        return (q.checks || []).length;
+      }),
+      caliberChanges: U.sum(list, function (q) {
+        return (q.caliberChanges || []).length;
+      }),
+      byStatus: byStatus,
+      byPriority: byPriority,
+    };
+  }
+
   /* ---------------- 导出 API ---------------- */
 
   global.OpsDesk.Store = {
@@ -280,10 +360,12 @@
     incidentById: incidentById,
     timeLogById: timeLogById,
     releaseById: releaseById,
+    queryById: queryById,
     dict: dict,
     dictItem: dictItem,
     stats: stats,
     categoryStats: categoryStats,
     releaseStats: releaseStats,
+    queryStats: queryStats,
   };
 })(window);

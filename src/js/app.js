@@ -14,7 +14,8 @@
     { key: 'incidents', label: '生产问题排查', icon: '⚠', shortcut: '3' },
     { key: 'timelog', label: '时间流水账', icon: '◷', shortcut: '4' },
     { key: 'releases', label: '版本投产', icon: '⧉', shortcut: '5' },
-    { key: 'briefing', label: '晨会汇报', icon: '✦', shortcut: '6' },
+    { key: 'queries', label: '取数登记', icon: '⊞', shortcut: '6' },
+    { key: 'briefing', label: '晨会汇报', icon: '✦', shortcut: '7' },
   ];
 
   var activeView = 'dashboard';
@@ -48,6 +49,7 @@
     incidents: function (root) { global.OpsDesk.Incidents.render(root); },
     timelog: function (root) { global.OpsDesk.TimeLog.render(root); },
     releases: function (root) { global.OpsDesk.Releases.render(root); },
+    queries: function (root) { global.OpsDesk.Queries.render(root); },
     briefing: function (root) { global.OpsDesk.Briefing.render(root); },
   };
 
@@ -176,7 +178,7 @@
           var normalized = global.OpsDesk.Seed.normalize(parsed);
           UI.confirm(
             '导入数据',
-            '导入将覆盖当前全部本地数据（任务 ' + (parsed.tasks || []).length + ' 条 / 故障 ' + (parsed.incidents || []).length + ' 条 / 版本 ' + (parsed.releases || []).length + ' 个）。是否继续？',
+            '导入将覆盖当前全部本地数据（任务 ' + (parsed.tasks || []).length + ' 条 / 故障 ' + (parsed.incidents || []).length + ' 条 / 版本 ' + (parsed.releases || []).length + ' 个 / 取数单 ' + (parsed.queries || []).length + ' 单）。是否继续？',
             function () {
               Store.mutate(function () {
                 // 整体替换
@@ -222,11 +224,12 @@
 
   function showShortcuts() {
     var rows = [
-      ['1 / 2 / 3 / 4 / 5 / 6', '快速切换视图'],
+      ['1 / 2 / 3 / 4 / 5 / 6 / 7', '快速切换视图'],
       ['N', '新建任务'],
       ['I', '录入生产问题'],
       ['T', '记录时间段'],
       ['V', '新建版本'],
+      ['Q', '新建取数单'],
       ['B', '生成站会稿'],
       ['⌘/Ctrl + Enter', '弹窗内快速提交'],
       ['⌘/Ctrl + Shift + L', '切换深色 / 浅色主题'],
@@ -310,7 +313,7 @@
 
       if (typing) return;
 
-      var map = { 1: 'dashboard', 2: 'tasks', 3: 'incidents', 4: 'timelog', 5: 'releases', 6: 'briefing' };
+      var map = { 1: 'dashboard', 2: 'tasks', 3: 'incidents', 4: 'timelog', 5: 'releases', 6: 'queries', 7: 'briefing' };
       if (map[e.key]) {
         e.preventDefault();
         go(map[e.key]);
@@ -333,6 +336,11 @@
         case 'v':
           e.preventDefault();
           global.OpsDesk.Releases.openEditor(null);
+          break;
+        case 'q':
+          e.preventDefault();
+          go('queries');
+          global.OpsDesk.Queries.openEditor(null);
           break;
         case 'b':
           e.preventDefault();
@@ -412,6 +420,10 @@
     var topNewRelease = U.$('#top-new-release');
     if (topNewRelease) {
       topNewRelease.addEventListener('click', function () { global.OpsDesk.Releases.openEditor(null); });
+    }
+    var topNewQuery = U.$('#top-new-query');
+    if (topNewQuery) {
+      topNewQuery.addEventListener('click', function () { global.OpsDesk.Queries.openEditor(null); });
     }
 
     Store.init().then(function (res) {

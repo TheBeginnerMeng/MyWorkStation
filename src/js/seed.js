@@ -50,6 +50,29 @@
       { key: 'released', label: '已上线', badge: 'badge-done', color: '#34d399' },
       { key: 'rolledback', label: '已回滚', badge: 'badge-blocked', color: '#f87171' },
     ],
+    /** 取数单状态（对应取数标准化流程的阶段） */
+    queryStatus: [
+      { key: 'pending_eval', label: '待评估', badge: 'badge-todo', color: '#60a5fa' },
+      { key: 'caliber_confirmed', label: '口径已确认', badge: 'badge-doing', color: '#38bdf8' },
+      { key: 'developing', label: '开发中', badge: 'badge-doing', color: '#a78bfa' },
+      { key: 'delivered', label: '已交付', badge: 'badge-done', color: '#34d399' },
+      { key: 'checked', label: '已核对归档', badge: 'badge-done', color: '#34d399' },
+      { key: 'cancelled', label: '已取消', badge: 'badge-blocked', color: '#f87171' },
+    ],
+    /** 取数优先级 */
+    queryPriority: [
+      { key: 'P0', label: 'P0 紧急', color: '#f87171' },
+      { key: 'P1', label: 'P1 高', color: '#fb923c' },
+      { key: 'P2', label: 'P2 中', color: '#38bdf8' },
+      { key: 'P3', label: 'P3 低', color: '#94a3b8' },
+    ],
+    /** 沟通留痕类型 */
+    channelType: [
+      { key: 'email', label: '邮件', icon: '✉️', color: '#38bdf8' },
+      { key: 'meeting', label: '会议', icon: '🗣️', color: '#a78bfa' },
+      { key: 'im', label: '即时沟通', icon: '💬', color: '#34d399' },
+      { key: 'other', label: '其他', icon: '📎', color: '#94a3b8' },
+    ],
   };
 
   /* ---------------- 项目 ---------------- */
@@ -341,6 +364,134 @@
       },
     ];
 
+    var queries = [
+      {
+        id: 'qry_demo_1',
+        code: 'QS2026010601',
+        title: '职工安全培训学时与参训人次取数',
+        requester: '人力资源部（业务方）',
+        pm: '产品一组 · 乙同学',
+        owner: '数据侧 · 甲同学',
+        executor: '数据开发 · 我',
+        requestDate: '2026-01-05',
+        periodStart: '2025-01-01',
+        periodEnd: '2025-12-31',
+        dueDate: '2026-01-08',
+        priority: 'P1',
+        status: 'checked',
+        metrics: [
+          {
+            id: 'qmt_demo_1',
+            name: '年度信息安全培训次数',
+            definition:
+              '按「年度开展的信息安全培训次数」统计，区分「本年开展次数」与「全年覆盖范围的信息安全培训次数」两个口径分别取数。',
+            dims: '按年份 × 参训范围（全体职工 / 本年新入职）',
+            filters: '培训主题命中「安全」或「信息安全」两个关键词，分别取数',
+            confirmedBy: '产品一组 · 乙同学',
+            confirmedAt: '2026-01-06',
+          },
+        ],
+        sqlText:
+          'SELECT stat_year,\n       split(kw, \',\') AS keyword,\n       COUNT(DISTINCT employee_id) AS emp_cnt,\n       SUM(hours) AS total_hours\nFROM   dwd_employee_training_detail\nWHERE  dt BETWEEN \'2025-01-01\' AND \'2025-12-31\'\n  AND  (keyword LIKE \'%安全%\' OR keyword LIKE \'%信息安全%\')\nGROUP  BY stat_year, keyword;',
+        sqlPath: '/data/query/用户域/QS2026010601',
+        sqlTables: 'dwd_employee_training_detail',
+        sqlEnv: '生产',
+        executedAt: '2026-01-06',
+        rowCount: 6,
+        resultPath: '/home/demo/下载/01-工作目录/2026年度/00-取数/20260106-取数',
+        resultSummary: '全年信息安全培训 7 次；参训人次中「安全」与「信息安全」分别为 11 人次 / 4 人次（抽样自查，年度口径以正式取数为准）。',
+        channels: [
+          {
+            id: 'qch_demo_1',
+            type: 'email',
+            date: '2026-01-05',
+            subject: '【取数需求】职工安全培训学时与参训人次统计',
+            from: '人力资源部 · 丙同学',
+            to: '产品一组 · 乙同学',
+            cc: '数据侧 · 甲同学',
+            content:
+              '业务侧确认口径后发此邮件，产品抄送数据侧。邮件中明确：按 2025 自然年统计，本次要分别按「安全」与「信息安全」两个关键词分开取数。',
+          },
+          {
+            id: 'qch_demo_2',
+            type: 'meeting',
+            date: '2026-01-05',
+            subject: '口径对齐会',
+            from: '产品一组 · 乙同学',
+            to: '数据侧 · 甲同学',
+            cc: '人力资源部 · 丙同学',
+            content:
+              '确认「活跃用户占比」等口径是否可取，并敲定培训次数的统计范围与时间区间（2025-01-01 ~ 2025-12-31）。',
+          },
+        ],
+        checks: [
+          {
+            id: 'qck_demo_1',
+            date: '2026-01-07',
+            withWho: '产品一组 · 乙同学',
+            result: '双方核对一致',
+            diff: '',
+            note: '逐行核对关键词分组与参训人次，无差异。',
+          },
+        ],
+        caliberChanges: [
+          {
+            id: 'qcc_demo_1',
+            date: '2026-01-06',
+            from: '信息安全培训次数（合并统计）',
+            to: '按「安全」/「信息安全」两个关键词分开统计',
+            reason: '20251008 上一版取过汇总口径，本次业务要求拆开',
+            by: '数据侧 · 甲同学',
+          },
+        ],
+        note: '脚本已归档到代码仓对应编号目录，后续复用时注意口径已按关键词拆分。',
+        createdAt: Date.now() - 86400000 * 8,
+        updatedAt: Date.now() - 86400000 * 6,
+      },
+      {
+        id: 'qry_demo_2',
+        code: 'QS2026020501',
+        title: '活跃用户占比口径复核',
+        requester: '业务运营组',
+        pm: '产品二组 · 丁同学',
+        owner: '数据侧 · 甲同学',
+        executor: '',
+        requestDate: '2026-02-04',
+        periodStart: '2025-11-01',
+        periodEnd: '2026-01-31',
+        dueDate: '2026-02-10',
+        priority: 'P2',
+        status: 'pending_eval',
+        metrics: [],
+        sqlText: '',
+        sqlPath: '',
+        sqlTables: '',
+        sqlEnv: '生产',
+        executedAt: '',
+        rowCount: 0,
+        resultPath: '',
+        resultSummary: '',
+        channels: [
+          {
+            id: 'qch_demo_3',
+            type: 'im',
+            date: '2026-02-05',
+            subject: '口径疑问',
+            from: '产品二组 · 丁同学',
+            to: '数据侧 · 甲同学',
+            cc: '',
+            content:
+              '待确认：20251104 口径已调整为「获得学时才纳入计算」，本次是沿用该口径，还是改回平均月活？',
+          },
+        ],
+        checks: [],
+        caliberChanges: [],
+        note: '口径待评估，尚未进入开发。',
+        createdAt: Date.now() - 86400000,
+        updatedAt: Date.now() - 3600000,
+      },
+    ];
+
     return {
       schemaVersion: 1,
       createdAt: Date.now(),
@@ -355,6 +506,7 @@
       incidents: incidents,
       timeLogs: timeLogs,
       releases: releases,
+      queries: queries,
     };
   }
 
@@ -378,6 +530,7 @@
       incidents: [],
       timeLogs: [],
       releases: [],
+      queries: [],
     };
 
     var projIds = {};
@@ -518,9 +671,132 @@
       });
     });
 
+    /* ---------------- 取数登记 ---------------- */
+
+    var qStatusKeys = {};
+    DICT.queryStatus.forEach(function (d) {
+      qStatusKeys[d.key] = true;
+    });
+    var qPriorityKeys = {};
+    DICT.queryPriority.forEach(function (d) {
+      qPriorityKeys[d.key] = true;
+    });
+    var qChannelKeys = {};
+    DICT.channelType.forEach(function (d) {
+      qChannelKeys[d.key] = true;
+    });
+
+    /**
+     * 日期归一化：既校验格式，也校验是否为真实存在的日期
+     * （如 2026-13-45 虽然格式匹配，但会让「已超期」判断失真）
+     */
+    function qDate(v, fallback) {
+      var s = String(v == null ? '' : v).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return fallback;
+      var p = s.split('-');
+      var d = new Date(+p[0], +p[1] - 1, +p[2]);
+      if (d.getFullYear() !== +p[0] || d.getMonth() !== +p[1] - 1 || d.getDate() !== +p[2]) {
+        return fallback;
+      }
+      return s;
+    }
+
+    (Array.isArray(s.queries) ? s.queries : []).forEach(function (q) {
+      if (!q) return;
+      var title = String(q.title == null ? '' : q.title).trim();
+      if (!title) return; // 没有标题的取数单直接丢弃
+
+      var metrics = [];
+      (Array.isArray(q.metrics) ? q.metrics : []).forEach(function (m) {
+        if (!m) return;
+        var name = String(m.name == null ? '' : m.name).trim();
+        if (!name) return;
+        metrics.push({
+          id: m.id || U.uid('qmt'),
+          name: name,
+          definition: m.definition || '',
+          dims: m.dims || '',
+          filters: m.filters || '',
+          confirmedBy: m.confirmedBy || '',
+          confirmedAt: qDate(m.confirmedAt, ''),
+        });
+      });
+
+      var channels = [];
+      (Array.isArray(q.channels) ? q.channels : []).forEach(function (c) {
+        if (!c) return;
+        channels.push({
+          id: c.id || U.uid('qch'),
+          type: qChannelKeys[c.type] ? c.type : 'other',
+          date: qDate(c.date, ''),
+          subject: c.subject || '',
+          from: c.from || '',
+          to: c.to || '',
+          cc: c.cc || '',
+          content: c.content || '',
+        });
+      });
+
+      var checks = [];
+      (Array.isArray(q.checks) ? q.checks : []).forEach(function (k) {
+        if (!k) return;
+        checks.push({
+          id: k.id || U.uid('qck'),
+          date: qDate(k.date, ''),
+          withWho: k.withWho || '',
+          result: k.result || '',
+          diff: k.diff || '',
+          note: k.note || '',
+        });
+      });
+
+      var caliberChanges = [];
+      (Array.isArray(q.caliberChanges) ? q.caliberChanges : []).forEach(function (cc) {
+        if (!cc) return;
+        caliberChanges.push({
+          id: cc.id || U.uid('qcc'),
+          date: qDate(cc.date, ''),
+          from: cc.from || '',
+          to: cc.to || '',
+          reason: cc.reason || '',
+          by: cc.by || '',
+        });
+      });
+
+      out.queries.push({
+        id: q.id || U.uid('qry'),
+        code: String(q.code == null ? '' : q.code).trim(),
+        title: title,
+        requester: q.requester || '',
+        pm: q.pm || '',
+        owner: q.owner || '',
+        executor: q.executor || '',
+        requestDate: qDate(q.requestDate, U.today()),
+        periodStart: qDate(q.periodStart, ''),
+        periodEnd: qDate(q.periodEnd, ''),
+        dueDate: qDate(q.dueDate, ''),
+        priority: qPriorityKeys[q.priority] ? q.priority : 'P2',
+        status: qStatusKeys[q.status] ? q.status : 'pending_eval',
+        metrics: metrics,
+        sqlText: q.sqlText || '',
+        sqlPath: q.sqlPath || '',
+        sqlTables: q.sqlTables || '',
+        sqlEnv: q.sqlEnv || '生产',
+        executedAt: qDate(q.executedAt, ''),
+        rowCount: Number(q.rowCount) || 0,
+        resultPath: q.resultPath || '',
+        resultSummary: q.resultSummary || '',
+        channels: channels,
+        checks: checks,
+        caliberChanges: caliberChanges,
+        note: q.note || '',
+        createdAt: q.createdAt || Date.now(),
+        updatedAt: q.updatedAt || Date.now(),
+      });
+    });
+
     return out;
   }
-
   global.OpsDesk = global.OpsDesk || {};
   global.OpsDesk.DICT = DICT;
   global.OpsDesk.Seed = {
