@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpsDesk · 个人工作台</title>
+<meta name="description" content="桌面端个人工作台：日程排期、生产问题排查、时间流水与晨会汇报一键生成。" />
+<link rel="stylesheet" href="./assets/css/app.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1020'/%3E%3Cpath d='M8 20l5-8 5 8 5-11' stroke='%2338bdf8' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+</head>
+
+<body class="h-full overflow-hidden">
+
+<div class="flex h-full min-w-[1080px]">
+
+  <!-- ============ 左栏：导航 / 概览 ============ -->
+  <aside class="flex w-[228px] shrink-0 flex-col border-r border-line/60 bg-raised/25 backdrop-blur-xl">
+    <!-- Brand -->
+    <div class="flex items-center gap-2.5 px-4 py-4">
+      <div class="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand2 shadow-[0_6px_18px_-8px_rgb(var(--c-brand)/0.9)]">
+        <span class="text-[15px] font-black text-slate-950">O</span>
+        <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-ok ring-2 ring-bg"></span>
+      </div>
+      <div class="min-w-0">
+        <div class="text-[14px] font-bold leading-tight tracking-tight text-ink">OpsDesk</div>
+        <div class="text-[10px] uppercase tracking-[0.14em] text-mute">个人工作台</div>
+      </div>
+    </div>
+
+    <div class="divider mx-4"></div>
+
+    <!-- Nav -->
+    <nav id="nav" class="mt-3 space-y-1 px-3"></nav>
+
+    <!-- 今日概览 -->
+    <div class="px-4 pt-5">
+      <div class="kicker mb-2">今日概览</div>
+      <div id="side-stats" class="space-y-1.5"></div>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- 数据管理 -->
+    <div class="px-3 pb-3">
+      <div class="kicker mb-2 px-1">数据管理</div>
+      <div class="space-y-1">
+        <button id="btn-projects" class="nav-item w-full" title="管理项目与重点标记">
+          <span class="nav-ico text-[12px]">◈</span><span class="flex-1 text-left text-[12px]">项目管理</span>
+        </button>
+        <button id="btn-export" class="nav-item w-full" title="导出 JSON 备份">
+          <span class="nav-ico text-[12px]">⇩</span><span class="flex-1 text-left text-[12px]">导出备份</span>
+        </button>
+        <button id="btn-import" class="nav-item w-full" title="导入 JSON 备份">
+          <span class="nav-ico text-[12px]">⇧</span><span class="flex-1 text-left text-[12px]">导入备份</span>
+        </button>
+        <button id="btn-reset" class="nav-item w-full" title="恢复演示数据">
+          <span class="nav-ico text-[12px]">↺</span><span class="flex-1 text-left text-[12px]">重置演示数据</span>
+        </button>
+        <button id="btn-shortcuts" class="nav-item w-full" title="查看快捷键">
+          <span class="nav-ico text-[12px]">⌘</span><span class="flex-1 text-left text-[12px]">快捷键说明</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Storage status -->
+    <div class="border-t border-line/60 px-4 py-2.5">
+      <div class="flex items-center gap-2 text-[10.5px] text-mute">
+        <span id="save-dot" class="h-1.5 w-1.5 shrink-0 rounded-full bg-ok"></span>
+        <span id="save-text">已保存 · 本地</span>
+      </div>
+      <div class="mt-0.5 text-[9.5px] text-mute/70">localStorage + IndexedDB 双写</div>
+    </div>
+  </aside>
+
+  <!-- ============ 中栏：核心操作区 ============ -->
+  <main id="main-scroll" class="scroll-y flex-1 overflow-y-auto">
+    <!-- Topbar -->
+    <header class="sticky top-0 z-30 flex items-center gap-3 border-b border-line/60 bg-bg/80 px-6 py-3 backdrop-blur-xl">
+      <div class="min-w-0 shrink-0">
+        <div class="flex items-center gap-2 whitespace-nowrap text-[11px] text-mute">
+          <span class="num shrink-0" id="clock">--:--</span>
+          <span class="h-1 w-1 shrink-0 rounded-full bg-line"></span>
+          <span class="shrink-0" id="today-label">今天</span>
+        </div>
+      </div>
+
+      <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <button id="top-new-task" class="btn" title="新建任务 (N)">
+          <span class="text-[12px]">▤</span><span class="hidden sm:inline">任务</span>
+        </button>
+        <button id="top-new-incident" class="btn" title="录入故障 (I)">
+          <span class="text-[12px]">⚠</span><span class="hidden sm:inline">故障</span>
+        </button>
+        <button id="top-new-log" class="btn" title="记录时间 (T)">
+          <span class="text-[12px]">◷</span><span class="hidden sm:inline">时间</span>
+        </button>
+        <button id="top-new-release" class="btn" title="记录版本投产 (V)">
+          <span class="text-[12px]">⧉</span><span class="hidden sm:inline">投产</span>
+        </button>
+        <button id="btn-briefing" class="btn btn-primary" title="生成站会稿 (B)">
+          <span class="text-[12px]">⚡</span><span>生成站会稿</span>
+        </button>
+        <div class="mx-1 h-5 w-px bg-line/70"></div>
+        <button id="theme-toggle" class="btn btn-icon" title="切换主题 (⌘/Ctrl + Shift + L)">☾</button>
+      </div>
+    </header>
+
+    <!-- View root -->
+    <div id="view-root" class="px-6 py-5"></div>
+  </main>
+
+  <!-- ============ 右栏：生成结果 / 实时面板 ============ -->
+  <aside class="flex w-[312px] shrink-0 flex-col border-l border-line/60 bg-raised/25 backdrop-blur-xl">
+    <!-- 生成结果头 -->
+    <div class="flex items-center justify-between gap-2 border-b border-line/60 px-4 py-3">
+      <div class="flex items-center gap-2">
+        <span class="text-[13px] font-semibold text-ink">生成结果</span>
+        <span class="rounded bg-brand/15 px-1.5 py-0.5 text-[9.5px] font-semibold text-brand">LIVE</span>
+      </div>
+      <div class="flex gap-1">
+        <button id="right-copy" class="btn btn-ghost h-7 px-2 text-[11px]" title="复制晨会汇报 Markdown">📋 复制</button>
+        <button id="right-regen" class="btn btn-ghost h-7 px-2 text-[11px]" title="重新生成">↻</button>
+      </div>
+    </div>
+
+    <!-- 汇总输出 -->
+    <div class="scroll-y flex-1 px-4 py-4">
+      <div id="right-output" class="md-body"></div>
+    </div>
+
+    <!-- 实时统计 -->
+    <div class="border-t border-line/60 px-4 py-3">
+      <div class="kicker mb-2">实时统计</div>
+      <div id="right-stats" class="grid grid-cols-2 gap-2"></div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Modal host -->
+<div id="modal-host"></div>
+<!-- Toast host -->
+<div id="toast-host" class="pointer-events-none fixed right-5 top-5 z-[60] flex flex-col items-end gap-2"></div>
+
+<script src="./src/js/utils.js"></script>
+<script src="./src/js/storage.js"></script>
+<script src="./src/js/seed.js"></script>
+<script src="./src/js/store.js"></script>
+<script src="./src/js/ui.js"></script>
+<script src="./src/js/picker.js"></script>
+<script src="./src/js/projects.js"></script>
+<script src="./src/js/tasks.js"></script>
+<script src="./src/js/incidents.js"></script>
+<script src="./src/js/timelog.js"></script>
+<script src="./src/js/releases.js"></script>
+<script src="./src/js/briefing.js"></script>
+<script src="./src/js/dashboard.js"></script>
+<script src="./src/js/rightpanel.js"></script>
+<script src="./src/js/app.js"></script>
+<script>
+  // 顶栏时钟
+  (function () {
+    var el = document.getElementById('clock');
+    var lbl = document.getElementById('today-label');
+    function tick() {
+      var d = new Date();
+      var hh = ('0' + d.getHours()).slice(-2);
+      var mm = ('0' + d.getMinutes()).slice(-2);
+      var ss = ('0' + d.getSeconds()).slice(-2);
+      el.textContent = hh + ':' + mm + ':' + ss;
+      var wd = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+      lbl.textContent = (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wd;
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+</body>
+</html>

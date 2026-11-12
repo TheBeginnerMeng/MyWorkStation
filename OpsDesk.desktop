@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OpsDesk 个人工作台
+Name[en]=OpsDesk Workstation
+Comment=任务排期 / 生产问题排查 / 时间流水 / 晨会站会稿
+Comment[en]=Local-first personal workbench
+Exec=bash -c 'cd "$(dirname "%k")" && bash ./启动.command'
+Icon=applications-office
+Terminal=true
+Categories=Office;Utility;
+Keywords=opsdesk;workbench;task;
+StartupNotify=false

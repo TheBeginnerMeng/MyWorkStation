@@ -1,0 +1,18 @@
+{
+  "name": "opsdesk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpsDesk · 桌面端个人工作台（任务排期 / 生产问题排查 / 时间流水 / 晨会简报）",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./assets/css/app.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./assets/css/app.css --watch",
+    "serve": "python3 serve.py 5173",
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.8",
+    "jsdom": "^27.0.1",
+    "tailwindcss": "^3.4.17"
+  }
+}
