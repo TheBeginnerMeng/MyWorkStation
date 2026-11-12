@@ -31,9 +31,24 @@ function clickByText(root, matcher) {
   return btn;
 }
 
-/** 取数单弹窗的文本输入框：[编号, 取数内容, 需求方, 产品, 数据侧, 执行人, 脚本路径, 涉及表, 结果路径] */
+/** 取数单弹窗的文本输入框：[取数内容, 需求方, 产品, 数据侧, 执行人, 脚本路径, 涉及表, 结果路径]
+ *  取数编号是日期控件承载的按钮，不在 text 输入框序列里 */
 function queryInputs(modal) {
   return modal.querySelectorAll('input[type=text]');
+}
+
+/** 读编号按钮上显示的编号文本 */
+function codeTextOf(modal) {
+  const t = modal.querySelector('.picker-trigger.num .picker-text');
+  return t ? t.textContent.trim() : '';
+}
+
+/** 编号按钮背后的日期载体（picker 的隐藏原生 input） */
+function codeDateInput(modal) {
+  const btn = modal.querySelector('.picker-trigger.num');
+  if (!btn) return null;
+  const wrap = btn.closest('.picker-field');
+  return wrap ? wrap.querySelector('input[type=date]') : null;
 }
 
 /** 取数单弹窗的分区标签按钮 */
@@ -213,6 +228,126 @@ test('取数登记：编号应按 QS + 日期 + 当日序号生成', async () =>
   }
 });
 
+/* ---------------- 编号可编辑 ---------------- */
+
+test('取数登记：编号应可点击选日期并自动重新生成', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Queries.openEditor(null);
+    const modal = topPanel(env);
+
+    // 编号默认按需求日期生成
+    const initial = codeTextOf(modal);
+    assert.match(initial, /^QS\d{8}\d{2}$/, '编号未自动生成');
+
+    // 点击编号应弹出日期选择面板
+    const trigger = modal.querySelector('.picker-trigger.num');
+    assert.ok(trigger, '编号不是可点击控件');
+    trigger.click();
+    const panel = env.document.querySelector('body .picker-panel');
+    assert.ok(panel, '点击编号未弹出日期控件');
+    env.OpsDesk.Picker.closeAll();
+
+    // 选一个日期 -> 编号自动重算
+    const dateInput = codeDateInput(modal);
+    assert.ok(dateInput, '编号缺少日期载体');
+    dateInput.value = '2026-03-05';
+    dateInput.dispatchEvent(new env.window.Event('change', { bubbles: true }));
+
+    assert.equal(codeTextOf(modal), 'QS2026030501', '选日期后编号未重新生成');
+
+    // 保存后落库为新编号
+    queryInputs(modal)[0].value = '编号可编辑验证取数单';
+    clickByText(topPanel(env), /创建取数单/);
+
+    const created = env.Store.state.queries[env.Store.state.queries.length - 1];
+    assert.equal(created.code, 'QS2026030501', '新编号未落库');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('取数登记：编号日期应随需求日期联动（未手动指定过时）', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Queries.openEditor(null);
+    const modal = topPanel(env);
+
+    // 改需求日期 -> 编号跟着重算
+    const dateInputs = modal.querySelectorAll('input[type=date]');
+    // 顺序：编号 / 需求日期 / 交付期限 / 数据周期起 / 数据周期止
+    dateInputs[1].value = '2026-04-08';
+    dateInputs[1].dispatchEvent(new env.window.Event('change', { bubbles: true }));
+
+    assert.equal(codeTextOf(modal), 'QS2026040801', '编号未跟随需求日期变化');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('取数登记：手动指定编号日期后不再跟随需求日期变化', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Queries.openEditor(null);
+    const modal = topPanel(env);
+
+    const codeInput = codeDateInput(modal);
+    codeInput.value = '2026-05-06';
+    codeInput.dispatchEvent(new env.window.Event('change', { bubbles: true }));
+    assert.equal(codeTextOf(modal), 'QS2026050601', '手动选日期后编号未更新');
+
+    // 再改需求日期，编号不应被带走
+    const dateInputs = modal.querySelectorAll('input[type=date]');
+    dateInputs[1].value = '2026-06-07';
+    dateInputs[1].dispatchEvent(new env.window.Event('change', { bubbles: true }));
+
+    assert.equal(codeTextOf(modal), 'QS2026050601', '手动指定编号日期后被需求日期带走了');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('取数登记：编辑时未动编号应保留原编号', async () => {
+  const env = await createSeededEnv();
+  try {
+    const q = env.Store.state.queries[0];
+    env.Queries.openEditor(q);
+    const modal = topPanel(env);
+
+    // 演示数据的编号是 QS2026010601，若把自身算进去会变成 ...02
+    assert.equal(codeTextOf(modal), q.code, '编辑时编号被自动改动了');
+
+    queryInputs(modal)[0].value = '只改内容的取数单';
+    clickByText(topPanel(env), /保存取数单/);
+
+    const after = env.Store.state.queries.find((x) => x.id === q.id);
+    assert.equal(after.code, q.code, '保存后编号被改动');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('取数登记：编辑时改编号日期应重新生成编号', async () => {
+  const env = await createSeededEnv();
+  try {
+    const q = env.Store.state.queries[0];
+    env.Queries.openEditor(q);
+    const modal = topPanel(env);
+
+    const codeInput = codeDateInput(modal);
+    codeInput.value = '2026-07-08';
+    codeInput.dispatchEvent(new env.window.Event('change', { bubbles: true }));
+    assert.equal(codeTextOf(modal), 'QS2026070801', '编辑时改编号日期未重新生成');
+
+    clickByText(topPanel(env), /保存取数单/);
+
+    const after = env.Store.state.queries.find((x) => x.id === q.id);
+    assert.equal(after.code, 'QS2026070801', '新编号未落库');
+  } finally {
+    env.cleanup();
+  }
+});
+
 /* ---------------- 视图渲染 ---------------- */
 
 test('取数登记：视图应渲染取数单的全链路内容', async () => {
@@ -289,7 +424,7 @@ test('取数登记：填写取数内容后错误提示应自动消除', async ()
     clickByText(modal, /创建取数单/);
     assert.ok(modal.textContent.includes('请填写取数内容'), '应先出现必填提示');
 
-    const input = queryInputs(modal)[1];
+    const input = queryInputs(modal)[0];
     input.value = '职工培训学时取数';
     input.dispatchEvent(new env.window.Event('input', { bubbles: true }));
 
@@ -306,12 +441,12 @@ test('取数登记：数据周期结束早于开始应被拦截', async () => {
     env.Queries.openEditor(null);
     const modal = topPanel(env);
 
-    queryInputs(modal)[1].value = '周期校验取数单';
+    queryInputs(modal)[0].value = '周期校验取数单';
     // 通过 picker 的隐藏原生 input 写入日期
     const dateInputs = modal.querySelectorAll('input[type=date]');
-    // 顺序：需求日期 / 交付期限 / 数据周期起 / 数据周期止
-    dateInputs[2].value = '2026-05-01';
-    dateInputs[3].value = '2026-04-01';
+    // 顺序：编号日期 / 需求日期 / 交付期限 / 数据周期起 / 数据周期止
+    dateInputs[3].value = '2026-05-01';
+    dateInputs[4].value = '2026-04-01';
 
     clickByText(modal, /创建取数单/);
 
@@ -400,13 +535,13 @@ test('取数登记：应能创建带口径与沟通记录的取数单', async ()
     env.Queries.openEditor(null);
     let modal = topPanel(env);
     const inputs = queryInputs(modal);
-    inputs[1].value = '职工安全培训学时取数';
-    inputs[2].value = '人力资源部（业务方）';
-    inputs[3].value = '产品一组 · 乙同学';
-    inputs[4].value = '数据侧 · 甲同学';
+    inputs[0].value = '职工安全培训学时取数';
+    inputs[1].value = '人力资源部（业务方）';
+    inputs[2].value = '产品一组 · 乙同学';
+    inputs[3].value = '数据侧 · 甲同学';
 
     // 编号应自动生成且符合 QS + 日期 + 序号
-    assert.match(inputs[0].value, /^QS\d{8}\d{2}$/, '取数编号未自动生成');
+    assert.match(codeTextOf(modal), /^QS\d{8}\d{2}$/, '取数编号未自动生成');
 
     // 加一条指标口径
     tabButtons(modal)[1].click();
@@ -511,7 +646,7 @@ test('取数登记：编辑取数单应更新原有记录而非新增', async ()
 
     env.Queries.openEditor(q);
     const modal = topPanel(env);
-    queryInputs(modal)[1].value = '改过的取数内容';
+    queryInputs(modal)[0].value = '改过的取数内容';
     clickByText(modal, /保存取数单/);
 
     const after = env.Store.state.queries;

@@ -72,19 +72,29 @@
   /**
    * 生成下一个取数编号：QS + YYYYMMDD + 当日 2 位序号。
    * 沿用既有 Excel 台账的编号格式，便于与历史台账对齐。
+   * @param {string} dateStr 编号日期（YYYY-MM-DD）
+   * @param {string} excludeId 需要排除的取数单 ID（编辑时排除自身，避免编号凭空 +1）
    */
-  function nextCode(dateStr) {
+  function nextCode(dateStr, excludeId) {
     var ymd = String(dateStr || '').replace(/-/g, '');
     if (!/^\d{8}$/.test(ymd)) ymd = U.today().replace(/-/g, '');
     var prefix = 'QS' + ymd;
     var max = 0;
     allQueries().forEach(function (q) {
+      if (excludeId && q.id === excludeId) return;
       var c = String(q.code || '');
       if (c.indexOf(prefix) !== 0) return;
       var n = parseInt(c.slice(prefix.length), 10);
       if (!isNaN(n) && n > max) max = n;
     });
     return prefix + U.pad(max + 1);
+  }
+
+  /** 从编号 QS2026010601 里取出日期部分 2026-01-06；解析不出返回空串 */
+  function codeDateOf(code) {
+    var m = /^QS(\d{4})(\d{2})(\d{2})\d{2}$/.exec(String(code || ''));
+    if (!m) return '';
+    return m[1] + '-' + m[2] + '-' + m[3];
   }
 
   function rangeStart(key) {
@@ -1004,12 +1014,38 @@
     var draftCalibers = (q.caliberChanges || []).slice();
 
     /* ---- 基本信息控件 ---- */
-    var fCode = U.el('input', {
-      class: 'input num',
-      type: 'text',
-      value: isEdit ? q.code : nextCode(q.requestDate),
-      readonly: true,
+
+    /**
+     * 取数编号：可点击选日期，日期一变编号自动重算。
+     * 内部用日期控件承载「编号日期」，按钮上显示的是算好的编号文本。
+     */
+    var codeDate = codeDateOf(q.code) || q.requestDate || U.today();
+    var codeChanged = false;
+    var fCode = global.OpsDesk.Picker.dateField({ value: codeDate });
+    var codeText = fCode.el.querySelector('.picker-text');
+    fCode.trigger.classList.add('num');
+    fCode.trigger.setAttribute('aria-label', '选择编号日期');
+    fCode.trigger.title = '点击选择日期，编号自动重新生成';
+
+    /** 把当前编号渲染到按钮上 */
+    function renderCode() {
+      if (isEdit && !codeChanged) {
+        // 编辑态且未动编号日期：显示原编号，避免与台账脱节
+        codeText.textContent = q.code || nextCode(codeDate, q.id);
+        return;
+      }
+      codeText.textContent = nextCode(codeDate, isEdit ? q.id : '');
+    }
+    renderCode();
+
+    // 选了新的编号日期 -> 立刻重算编号
+    fCode.addEventListener('change', function () {
+      if (!fCode.value) return;
+      codeDate = fCode.value;
+      codeChanged = true;
+      renderCode();
     });
+
     var fTitle = U.el('input', {
       class: 'input',
       type: 'text',
@@ -1058,12 +1094,13 @@
       );
     });
 
-    // 新建时改需求日期，编号跟着变（编号按需求日期生成）
-    if (!isEdit) {
-      fRequestDate.addEventListener('change', function () {
-        fCode.value = nextCode(fRequestDate.value);
-      });
-    }
+    // 需求日期变化时，编号日期默认跟着走（除非用户已手动指定过编号日期）
+    fRequestDate.addEventListener('change', function () {
+      if (codeChanged || !fRequestDate.value) return;
+      codeDate = fRequestDate.value;
+      fCode.value = codeDate;
+      renderCode();
+    });
 
     /* ---- SQL 与结果控件 ---- */
     var fSqlText = U.el('textarea', {
@@ -1325,7 +1362,11 @@
       onclick: function () {
         if (!validate()) return;
         var payload = {
-          code: fCode.value.trim(),
+          // 编辑且未动编号日期时保留原编号；否则按编号日期重新生成
+          code:
+            isEdit && !codeChanged
+              ? q.code || nextCode(codeDate, q.id)
+              : nextCode(codeDate, isEdit ? q.id : ''),
           title: fTitle.value.trim(),
           requester: fRequester.value.trim(),
           pm: fPm.value.trim(),
@@ -1383,7 +1424,7 @@
     /* ---- 面板组装 ---- */
     var basicPanel = U.el('div', { class: 'space-y-4' }, [
       U.el('div', { class: 'grid grid-cols-1 gap-4 sm:grid-cols-3' }, [
-        field('取数编号', fCode, 'QS + 需求日期 + 当日序号，自动生成'),
+        field('取数编号', fCode.el, '点击选择日期，编号自动重新生成（QS + 日期 + 当日序号）'),
         field('取数内容 *', fTitle),
         field('优先级', fPriority),
       ]),
