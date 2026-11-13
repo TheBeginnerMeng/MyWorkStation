@@ -25,6 +25,24 @@ function section(md, marker) {
   return end < 0 ? rest : rest.slice(0, end);
 }
 
+/** 日期前后平移 n 天（与 U.addDays 同语义） */
+function shift(ymd, n) {
+  const d = new Date(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10));
+  d.setDate(d.getDate() + n);
+  const p = (x) => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/** 站会稿首行标题 */
+function titleOf(md) {
+  return md.split('\n')[0];
+}
+
+/** 期望的标题行 */
+function expectTitle(env, ymd) {
+  return '# 晨会 · ' + env.Utils.shortDate(ymd) + ' ' + env.Utils.weekCn(env.Utils.parseYmd(ymd));
+}
+
 test('简报：生成的站会稿应包含规格要求的四个段落', async () => {
   const env = await createSeededEnv();
   try {
@@ -269,6 +287,177 @@ test('简报：重新生成应覆盖旧结果', async () => {
     env.Briefing.build();
     const second = env.Briefing.markdown;
     assert.notEqual(first, second, '重新生成后内容未变化');
+  } finally {
+    env.cleanup();
+  }
+});
+
+/* ============================================================
+   站会日期口径：默认当天（不是第二天），且可手动改口径
+   ============================================================ */
+
+test('简报：标题默认应是当天，不得默认生成第二天', async () => {
+  const env = await createSeededEnv();
+  try {
+    const md = env.Briefing.build();
+    assert.equal(titleOf(md), expectTitle(env, env.Utils.today()), '标题应为今天的日期');
+    assert.notEqual(titleOf(md), expectTitle(env, env.Utils.tomorrow()), '标题不应是明天的日期');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：默认口径下段落表述应围绕今天', async () => {
+  const env = await createSeededEnv();
+  try {
+    const md = env.Briefing.build();
+    assert.ok(/## 📝 昨日产出/.test(md), '产出段落应为「昨日产出」');
+    assert.ok(/## 📅 今日计划/.test(md), '计划段落应为「今日计划」');
+    assert.ok(/昨天至今/.test(md), '副标题口径应为「昨天至今」');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：站会日期改为明天后，标题与段落表述应整体跟随', async () => {
+  const env = await createSeededEnv();
+  try {
+    const tomorrow = env.Utils.tomorrow();
+    const md = env.Briefing.build(tomorrow);
+    assert.equal(titleOf(md), expectTitle(env, tomorrow), '标题应为明天的日期');
+    // 产出窗口 = [今天, 明天]
+    assert.ok(/## 📝 今日产出/.test(md), '产出段落应为「今日产出」');
+    // 排期窗口 = [明天, 后天]
+    assert.ok(/## 📅 明日计划/.test(md), '计划段落应为「明日计划」');
+    assert.ok(/今天至今/.test(md), '副标题口径应为「今天至今」');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：站会日期改为昨天后，产出窗口应回看前一天', async () => {
+  const env = await createSeededEnv();
+  try {
+    const yest = env.Utils.yesterday();
+    const prev = shift(yest, -1);
+    const md = env.Briefing.build(yest);
+    assert.equal(titleOf(md), expectTitle(env, yest), '标题应为昨天的日期');
+    assert.ok(/## 📅 昨日计划/.test(md), '计划段落应为「昨日计划」');
+    assert.ok(md.includes(env.Utils.friendlyDate(prev) + '至今'), '副标题口径应为前一日至今');
+
+    // 产出窗口 = [前天, 昨天]：窗口内的已完成应出现，窗口外的不应出现
+    const core = section(md, '## 📝');
+    const inWindow = env.Store.state.tasks.filter(
+      (t) => t.status === 'done' && (t.date === prev || t.date === yest)
+    );
+    inWindow.forEach((t) => {
+      assert.ok(core.includes(t.title), `窗口内已完成任务「${t.title}」缺失`);
+    });
+    const outWindow = env.Store.state.tasks.filter(
+      (t) => t.status === 'done' && t.date !== prev && t.date !== yest
+    );
+    outWindow.forEach((t) => {
+      assert.ok(!core.includes(t.title), `窗口外的已完成任务「${t.title}」不应出现`);
+    });
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：非站会当天的排期应带日名标签，避免与当天混排', async () => {
+  const env = await createSeededEnv();
+  try {
+    const md = env.Briefing.build();
+    const planSection = section(md, '## 📅');
+    const tomorrowTasks = env.Store.state.tasks.filter(
+      (t) => t.status !== 'done' && t.date === env.Utils.tomorrow()
+    );
+    assert.ok(tomorrowTasks.length > 0, '演示数据缺少次日排期');
+    assert.ok(/- 明日 /.test(planSection), '次日排期应带「明日」标签');
+    // 当天的排期不加标签
+    const todayTasks = env.Store.state.tasks.filter(
+      (t) => t.status !== 'done' && t.date === env.Utils.today()
+    );
+    if (todayTasks.length > 0) {
+      assert.ok(!/- 今日 /.test(planSection), '站会当天的排期不应带日期标签');
+    }
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：界面应提供站会日期选择器，默认值为今天', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Briefing.render(env.document.getElementById('view-root'));
+    const root = env.document.getElementById('view-root');
+    const native = root.querySelector('input[type=date]');
+    assert.ok(native, '缺少站会日期控件');
+    assert.equal(native.value, env.Utils.today(), '站会日期默认应为今天');
+    assert.ok(root.textContent.includes('站会日期'), '缺少站会日期标签');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：界面改站会日期后生成，标题应跟随所选日期', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Briefing.render(env.document.getElementById('view-root'));
+    const root = env.document.getElementById('view-root');
+    const native = root.querySelector('input[type=date]');
+    const target = env.Utils.tomorrow();
+    native.value = target;
+    native.dispatchEvent(new env.window.Event('change', { bubbles: true }));
+
+    const btn = Array.from(root.querySelectorAll('button')).find((b) => /生成站会稿/.test(b.textContent));
+    assert.ok(btn, '缺少生成按钮');
+    btn.click();
+
+    assert.equal(titleOf(env.Briefing.markdown), expectTitle(env, target), '标题应跟随所选站会日期');
+    assert.equal(env.Briefing.meta.anchorDate, target, '元信息应记录站会日期');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：重新生成应沿用已选的站会日期', async () => {
+  const env = await createSeededEnv();
+  try {
+    const target = env.Utils.tomorrow();
+    env.Briefing.build(target);
+    const md = env.Briefing.build();
+    assert.equal(titleOf(md), expectTitle(env, target), '重新生成应沿用已选站会日期');
+    assert.equal(env.Briefing.anchor, target, '应暴露当前站会日期');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：非法站会日期应回退到今天', async () => {
+  const env = await createSeededEnv();
+  try {
+    const md = env.Briefing.build('不是日期');
+    assert.equal(titleOf(md), expectTitle(env, env.Utils.today()), '非法日期应回退到今天');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('简报：改站会日期后，右栏数据来源应按新口径刷新', async () => {
+  const env = await createSeededEnv();
+  try {
+    env.Briefing.render(env.document.getElementById('view-root'));
+    const root = env.document.getElementById('view-root');
+    const native = root.querySelector('input[type=date]');
+    const target = env.Utils.tomorrow();
+    native.value = target;
+    native.dispatchEvent(new env.window.Event('change', { bubbles: true }));
+
+    const text = root.textContent;
+    assert.ok(text.includes('今日至今'), '站会日为明天时，已完成口径应为「今日至今」');
+    assert.ok(text.includes('明日待办'), '站会日为明天时，排期口径应为「明日待办」');
+    assert.ok(!text.includes('昨日至今'), '旧口径「昨日至今」应随站会日期刷新');
   } finally {
     env.cleanup();
   }
