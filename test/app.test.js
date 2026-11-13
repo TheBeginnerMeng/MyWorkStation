@@ -287,7 +287,7 @@ test('右栏：应随视图切换输出对应摘要', async () => {
   }
 });
 
-test('外壳：重置演示数据应恢复初始状态', async () => {
+test('外壳：载入演示数据后项目归属应正确（不再有破坏性的重置入口）', async () => {
   const env = await createSeededEnv();
   try {
     env.Store.mutate((s) => {
@@ -295,17 +295,14 @@ test('外壳：重置演示数据应恢复初始状态', async () => {
     }, 'clear');
     assert.equal(env.Store.state.tasks.length, 0);
 
-    // 触发重置（与 UI 按钮同一逻辑）
-    const fresh = env.Seed.normalize(env.Seed.build());
-    env.Store.mutate(() => {
-      Object.keys(env.Store.state).forEach((k) => delete env.Store.state[k]);
-      Object.assign(env.Store.state, fresh);
-    }, 'reset');
+    // 追加演示数据（与 UI「⊞ 载入演示数据」同一逻辑）
+    const added = env.Store.appendDemo();
+    assert.ok(added.tasks > 0, '应追加出演示任务');
+    assert.equal(env.Store.state.tasks.length, added.tasks);
 
-    assert.ok(env.Store.state.tasks.length > 0, '重置后任务为空');
-    // 重置后项目归属应正确
+    // 演示数据归属应分散在多个项目上，而不是塌缩成一个
     const names = new Set(env.Store.state.tasks.map((t) => env.Store.projectName(t.project)));
-    assert.ok(names.size > 1, '重置后项目归属塌缩');
+    assert.ok(names.size > 1, '演示任务的项目归属塌缩');
   } finally {
     env.cleanup();
   }

@@ -149,8 +149,11 @@ test('存储：初始化后数据应真正落盘，刷新可恢复', async () =>
     const raw = env.window.localStorage.getItem('opsdesk:state:v1');
     assert.ok(raw, '状态未写入 localStorage');
     const parsed = JSON.parse(raw);
-    assert.ok(parsed.tasks.length > 0, '落盘数据中任务为空');
+    assert.ok(Array.isArray(parsed.tasks), '落盘数据中 tasks 非法');
     assert.ok(parsed.projects.length > 0, '落盘数据中项目为空');
+    // 启动不再自动灌入演示数据
+    assert.equal(parsed.tasks.length, 0, '启动不应自动灌入演示任务');
+    assert.ok(!parsed.tasks.some((t) => t.demo), '落盘数据不应含演示记录');
   } finally {
     env.cleanup();
   }

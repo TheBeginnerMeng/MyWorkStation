@@ -148,10 +148,13 @@
     load: function () {
       var lsState = lsGet(LS_KEY);
       var meta = lsGet(LS_META) || {};
+      /* 时间戳兜底：meta 被单独清掉时，用状态自带的 updatedAt 兜底，
+         否则会拿「旧的 IDB 副本」盖掉「新的 localStorage 数据」 */
+      var lsUpdated = lsState && lsState.updatedAt ? lsState.updatedAt : 0;
       var result = {
         state: lsState,
         source: lsState ? 'localStorage' : 'none',
-        updatedAt: meta.updatedAt || 0,
+        updatedAt: Math.max(meta.updatedAt || 0, lsUpdated),
         idbChecked: false,
       };
 
@@ -269,6 +272,35 @@
         bytes = 0;
       }
       return { bytes: bytes, kb: Math.round((bytes / 1024) * 10) / 10 };
+    },
+
+    /**
+     * 存储可用性自检
+     * 用于回答两个问题：数据到底存在哪个空间？这次到底能不能存住？
+     */
+    probe: function () {
+      var ls = false;
+      try {
+        var k = NS + ':probe:v1';
+        global.localStorage.setItem(k, '1');
+        global.localStorage.removeItem(k);
+        ls = true;
+      } catch (e) {
+        ls = false;
+      }
+      var idb = false;
+      try {
+        idb = !!global.indexedDB;
+      } catch (e) {
+        idb = false;
+      }
+      var origin = '';
+      try {
+        origin = global.location && global.location.origin ? global.location.origin : '';
+      } catch (e) {
+        origin = '';
+      }
+      return { localStorage: ls, indexedDB: idb, origin: origin };
     },
   };
 

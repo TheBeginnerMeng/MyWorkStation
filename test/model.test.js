@@ -113,7 +113,10 @@ test('Seed：normalize 对完全无效输入应返回可用的空状态', () => 
     assert.ok(norm, '未返回状态');
     assert.ok(Array.isArray(norm.tasks));
     assert.ok(Array.isArray(norm.projects));
-    assert.ok(norm.projects.length > 0, '应回落到默认项目');
+    // 关键行为：normalize 不再往空数据里塞演示项目
+    // （否则用户删空项目后，每次启动又冒出测试数据）
+    assert.equal(norm.projects.length, 0, 'normalize 不应再回落到演示项目');
+    assert.ok(!norm.projects.some((p) => p.demo), '不应出现演示项目');
     const norm2 = env.Seed.normalize({ tasks: 'not-an-array' });
     assert.deepEqual(norm2.tasks, [], '非数组 tasks 应归一化为空数组');
   } finally {

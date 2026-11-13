@@ -492,7 +492,8 @@
       },
     ];
 
-    return {
+    /* 演示数据统一打标记：便于「清除演示数据」精确识别，不与真实数据混淆 */
+    var out = {
       schemaVersion: 1,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -508,6 +509,11 @@
       releases: releases,
       queries: queries,
     };
+    ['projects', 'tasks', 'incidents', 'timeLogs', 'releases', 'queries'].forEach(function (k) {
+      out[k].forEach(function (r) { r.demo = true; });
+    });
+
+    return out;
   }
 
   /* ---------------- 归一化 / 修复 ---------------- */
@@ -544,14 +550,11 @@
         color: p.color || '#38bdf8',
         flagship: !!p.flagship,
         desc: p.desc || '',
+        demo: !!p.demo,
       });
     });
-    if (!out.projects.length) {
-      out.projects = U.clone(PROJECTS);
-      out.projects.forEach(function (p) {
-        projIds[p.id] = true;
-      });
-    }
+    /* 注意：这里不再补演示项目。
+       以前「没有项目就塞 4 个演示项目」的兜底，会让用户删空项目后每次启动又冒出测试数据。 */
 
     var statusKeys = {};
     DICT.taskStatus.forEach(function (d) {
@@ -564,12 +567,12 @@
 
     /** 兼容「项目 ID」与「项目名称」两种写法，避免归属塌缩到首个项目 */
     function resolveProject(value) {
-      if (!value) return out.projects[0].id;
+      if (!value) return out.projects.length ? out.projects[0].id : '';
       if (projIds[value]) return value;
       for (var i = 0; i < out.projects.length; i++) {
         if (out.projects[i].name === value) return out.projects[i].id;
       }
-      return out.projects[0].id;
+      return out.projects.length ? out.projects[0].id : '';
     }
 
     (Array.isArray(s.tasks) ? s.tasks : []).forEach(function (t) {
@@ -585,6 +588,7 @@
         priority: t.priority || 'P2',
         note: t.note || '',
         flagship: !!t.flagship,
+        demo: !!t.demo,
         createdAt: t.createdAt || Date.now(),
         updatedAt: t.updatedAt || Date.now(),
       });
@@ -605,6 +609,7 @@
         diagnosis: i.diagnosis || '',
         solution: i.solution || '',
         owner: i.owner || '我',
+        demo: !!i.demo,
         createdAt: i.createdAt || Date.now(),
         updatedAt: i.updatedAt || Date.now(),
       });
@@ -625,6 +630,7 @@
         category: catKeys[l.category] ? l.category : 'dev',
         desc: l.desc || '',
         project: l.project ? resolveProject(l.project) : null,
+        demo: !!l.demo,
         createdAt: l.createdAt || Date.now(),
       });
     });
@@ -666,6 +672,7 @@
         owner: r.owner || '',
         note: r.note || '',
         items: items,
+        demo: !!r.demo,
         createdAt: r.createdAt || Date.now(),
         updatedAt: r.updatedAt || Date.now(),
       });
@@ -790,6 +797,7 @@
         checks: checks,
         caliberChanges: caliberChanges,
         note: q.note || '',
+        demo: !!q.demo,
         createdAt: q.createdAt || Date.now(),
         updatedAt: q.updatedAt || Date.now(),
       });
@@ -797,11 +805,135 @@
 
     return out;
   }
+
+  /* ---------------- 演示数据识别 / 清除 ----------------
+     演示数据必须可被精确定位，否则就会和用户的真实数据混在一起。
+     规则：
+       1) 新版种子数据统一带 demo:true 标记；
+       2) 兼容旧版本已落库的演示记录（按 id 特征 + 项目固定名称判断）。 */
+
+  var DEMO_ID_RE = {
+    tasks: /^tsk_demo_/,
+    incidents: /^inc_demo_/,
+    timeLogs: /^tl_\d+$/,
+    releases: /^rel_demo_/,
+    queries: /^qry_demo_/,
+  };
+
+  /* 演示项目的「原始名称」：改过名的视为用户自己的项目，保留不动 */
+  var DEMO_PROJECT_NAMES = {
+    prj_migration: '集群迁移',
+    prj_ops: '日常运维',
+    prj_data: '数据平台',
+    prj_cost: '成本优化',
+  };
+
+  /** 是否为演示记录 */
+  function isDemoRecord(kind, rec) {
+    if (!rec) return false;
+    if (rec.demo === true) return true;
+    var re = DEMO_ID_RE[kind];
+    return !!(re && re.test(String(rec.id || '')));
+  }
+
+  /** 是否为演示项目（改过名字的一律保留） */
+  function isDemoProject(p) {
+    if (!p || !p.id) return false;
+    var demoName = DEMO_PROJECT_NAMES[p.id];
+    if (demoName) return p.name === demoName;
+    return p.demo === true;
+  }
+
+  /**
+   * 从既有数据中剔除全部演示记录，保留真实数据
+   * @returns {{state: Object, removed: Object}} 新状态 + 各类型删除条数
+   */
+  function stripDemo(state) {
+    var s = state && typeof state === 'object' ? state : {};
+    var removed = { projects: 0, tasks: 0, incidents: 0, timeLogs: 0, releases: 0, queries: 0 };
+    var out = {
+      schemaVersion: s.schemaVersion || 1,
+      createdAt: s.createdAt || Date.now(),
+      updatedAt: s.updatedAt || Date.now(),
+      settings: Object.assign(
+        { theme: 'dark', activeView: 'dashboard', focusProjectId: null },
+        s.settings || {}
+      ),
+      projects: [],
+      tasks: [],
+      incidents: [],
+      timeLogs: [],
+      releases: [],
+      queries: [],
+    };
+
+    (Array.isArray(s.projects) ? s.projects : []).forEach(function (p) {
+      if (isDemoProject(p)) removed.projects++;
+      else out.projects.push(p);
+    });
+    ['tasks', 'incidents', 'timeLogs', 'releases', 'queries'].forEach(function (k) {
+      (Array.isArray(s[k]) ? s[k] : []).forEach(function (r) {
+        if (isDemoRecord(k, r)) removed[k]++;
+        else out[k].push(r);
+      });
+    });
+
+    /* focusProjectId 可能指向已删除的演示项目 */
+    var focus = out.settings.focusProjectId;
+    var focusAlive = out.projects.some(function (p) { return p.id === focus; });
+    if (!focusAlive) out.settings.focusProjectId = out.projects.length ? out.projects[0].id : null;
+
+    return { state: out, removed: removed };
+  }
+
+  /** 统计当前数据里还有多少演示记录 */
+  function demoCounts(state) {
+    var s = state && typeof state === 'object' ? state : {};
+    var counts = { projects: 0, tasks: 0, incidents: 0, timeLogs: 0, releases: 0, queries: 0 };
+    (Array.isArray(s.projects) ? s.projects : []).forEach(function (p) {
+      if (isDemoProject(p)) counts.projects++;
+    });
+    ['tasks', 'incidents', 'timeLogs', 'releases', 'queries'].forEach(function (k) {
+      (Array.isArray(s[k]) ? s[k] : []).forEach(function (r) {
+        if (isDemoRecord(k, r)) counts[k]++;
+      });
+    });
+    counts.total =
+      counts.projects + counts.tasks + counts.incidents + counts.timeLogs + counts.releases + counts.queries;
+    return counts;
+  }
+
+  /**
+   * 空白工作台：不含任何演示数据，只留一个可用的默认项目
+   * 首次启动（或当前存储空间没有数据）时使用，绝不自动灌入演示记录
+   */
+  function blank() {
+    return {
+      schemaVersion: 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      settings: { theme: 'dark', activeView: 'dashboard', focusProjectId: 'prj_default' },
+      projects: [
+        { id: 'prj_default', name: '我的项目', color: '#38bdf8', flagship: false, desc: '' },
+      ],
+      tasks: [],
+      incidents: [],
+      timeLogs: [],
+      releases: [],
+      queries: [],
+    };
+  }
+
   global.OpsDesk = global.OpsDesk || {};
   global.OpsDesk.DICT = DICT;
   global.OpsDesk.Seed = {
     build: buildSeed,
     normalize: normalize,
+    blank: blank,
+    stripDemo: stripDemo,
+    demoCounts: demoCounts,
+    isDemoRecord: isDemoRecord,
+    isDemoProject: isDemoProject,
     PROJECTS: PROJECTS,
   };
 })(window);

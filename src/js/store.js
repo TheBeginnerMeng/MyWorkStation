@@ -57,20 +57,102 @@
 
   /* ---------------- 初始化 ---------------- */
 
+  /**
+   * 启动初始化
+   * 重要：**不再自动灌入演示数据**。
+   * 以前首次启动（以及每次「读不到本地数据」时）都会灌一套演示记录，
+   * 结果和用户自己的真实数据混在一起，还反复出现。
+   * 现在没有数据就空白启动，演示数据只能由用户显式点「载入演示数据」。
+   */
   function init() {
     return Storage.load().then(function (res) {
       var raw = res.state;
       if (!raw) {
-        // 首次打开：构建演示数据并归一化（保证项目归属等字段规范一致）
-        state = Seed.normalize(Seed.build());
+        // 当前存储空间没有数据 → 空白工作台（只留一个默认项目）
+        state = Seed.normalize(Seed.blank());
         persist();
-      } else {
-        state = Seed.normalize(raw);
-        state.updatedAt = Date.now();
-        if (res.source === 'indexedDB') persist();
+        return { state: state, source: res.source, blank: true };
       }
-      return { state: state, source: res.source };
+      state = Seed.normalize(raw);
+      state.updatedAt = Date.now();
+      if (res.source === 'indexedDB') persist();
+      return { state: state, source: res.source, blank: false };
     });
+  }
+
+  /* ---------------- 演示数据管理 ---------------- */
+
+  /** 当前数据里还有多少演示记录 */
+  function demoStats() {
+    return Seed.demoCounts(state);
+  }
+
+  /**
+   * 追加演示数据（体验用）：只新增，不动已有真实数据。
+   * 演示项目与用户自己的项目重名时自动加「（示例）」后缀，避免混在一起。
+   */
+  function appendDemo() {
+    var demo = Seed.normalize(Seed.build());
+    var added = { projects: 0, tasks: 0, incidents: 0, timeLogs: 0, releases: 0, queries: 0 };
+    mutate(function (s) {
+      var idTaken = {};
+      var nameTaken = {};
+      s.projects.forEach(function (p) { idTaken[p.id] = true; nameTaken[p.name] = true; });
+
+      /* 演示项目：冲突就改名，避免和用户自己的同名项目混在一起 */
+      var nameMap = {};
+      demo.projects.forEach(function (p) {
+        var np = {
+          id: p.id,
+          name: p.name,
+          color: p.color,
+          flagship: p.flagship,
+          desc: p.desc,
+          demo: true,
+        };
+        if (idTaken[np.id] || nameTaken[np.name]) {
+          np.id = U.uid('prj');
+          np.name = p.name + '（示例）';
+        }
+        idTaken[np.id] = true;
+        nameTaken[np.name] = true;
+        nameMap[p.name] = np.id;
+        s.projects.push(np);
+        added.projects++;
+      });
+
+      /* 演示记录：归属改指向上面的演示项目；id 冲突则换新 id */
+      var prefix = { tasks: 'tsk', incidents: 'inc', timeLogs: 'tl', releases: 'rel', queries: 'qry' };
+      Object.keys(prefix).forEach(function (k) {
+        var used = {};
+        (s[k] || []).forEach(function (r) { used[r.id] = true; });
+        (demo[k] || []).forEach(function (r) {
+          if (r.project && nameMap[r.project]) r.project = nameMap[r.project];
+          if (used[r.id]) r.id = U.uid(prefix[k]);
+          used[r.id] = true;
+          r.demo = true;
+          s[k].push(r);
+          added[k]++;
+        });
+      });
+    }, 'demo:append');
+    return added;
+  }
+
+  /** 清除全部演示数据，保留真实数据 */
+  function purgeDemo() {
+    var res = Seed.stripDemo(state);
+    mutate(function (s) {
+      Object.keys(s).forEach(function (k) { delete s[k]; });
+      Object.assign(s, res.state);
+      /* 至少保留一个项目，否则各模块无处归属 */
+      if (!s.projects.length) {
+        var def = Seed.normalize(Seed.blank());
+        s.projects = def.projects;
+        s.settings.focusProjectId = def.settings.focusProjectId;
+      }
+    }, 'demo:purge');
+    return res.removed;
   }
 
   /* ---------------- 变更 ---------------- */
@@ -347,6 +429,9 @@
     mutate: mutate,
     persist: persist,
     persistSoon: persistSoon,
+    appendDemo: appendDemo,
+    purgeDemo: purgeDemo,
+    demoStats: demoStats,
     get state() {
       return state;
     },

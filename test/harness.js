@@ -54,8 +54,10 @@ function createEnv(opts = {}) {
     <div id="btn-projects"></div>
     <div id="btn-export"></div>
     <div id="btn-import"></div>
-    <div id="btn-reset"></div>
+    <div id="btn-demo"></div>
+    <div id="btn-purge-demo"></div>
     <div id="btn-shortcuts"></div>
+    <div id="storage-info"></div>
     <div id="right-output"></div>
     <div id="right-stats"></div>
     <div id="right-copy"></div>
@@ -74,9 +76,12 @@ function createEnv(opts = {}) {
   const win = dom.window;
 
   // ---- IndexedDB 模拟 ----
-  const fidb = require('fake-indexeddb');
-  win.indexedDB = fidb.indexedDB;
-  win.IDBKeyRange = fidb.IDBKeyRange;
+  // 每个环境用独立的 FDBFactory：默认的 fake-indexeddb 实例是进程级共享的，
+  // 会让上一个用例写入的 IDB 副本覆盖当前用例的 localStorage，造成用例间互相污染
+  const FDBFactory = require('fake-indexeddb/lib/FDBFactory');
+  const FDBKeyRange = require('fake-indexeddb/lib/FDBKeyRange');
+  win.indexedDB = new FDBFactory();
+  win.IDBKeyRange = FDBKeyRange.IDBKeyRange || FDBKeyRange;
 
   // ---- 补齐 jsdom 缺失的 API ----
   win.navigator.clipboard = {
@@ -181,9 +186,17 @@ function createEnv(opts = {}) {
 
 /**
  * 初始化一套带演示数据的环境（需 await）
+ *
+ * 注意：应用启动时**不再自动灌入演示数据**（避免和真实数据混淆），
+ * 所以测试环境改为显式把演示数据写进 localStorage，模拟「已载入演示数据的工作台」。
  */
 async function createSeededEnv(opts = {}) {
   const env = createEnv(opts);
+  const seeded = env.OpsDesk.Seed.normalize(env.OpsDesk.Seed.build());
+  const at = Date.now();
+  seeded.updatedAt = at;
+  env.window.localStorage.setItem('opsdesk:state:v1', JSON.stringify(seeded));
+  env.window.localStorage.setItem('opsdesk:meta:v1', JSON.stringify({ updatedAt: at }));
   // 受控启动 app.js（html 上带 data-opsdesk-manual="1" 故未自动 boot）
   env.OpsDesk.App.boot();
   await env.OpsDesk.App.ready;

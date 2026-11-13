@@ -53,8 +53,11 @@
         <button id="btn-import" class="nav-item w-full" title="导入 JSON 备份">
           <span class="nav-ico text-[12px]">⇧</span><span class="flex-1 text-left text-[12px]">导入备份</span>
         </button>
-        <button id="btn-reset" class="nav-item w-full" title="恢复演示数据">
-          <span class="nav-ico text-[12px]">↺</span><span class="flex-1 text-left text-[12px]">重置演示数据</span>
+        <button id="btn-demo" class="nav-item w-full" title="追加一组演示数据（不影响你自己的数据，可随时清除）">
+          <span class="nav-ico text-[12px]">⊞</span><span class="flex-1 text-left text-[12px]">载入演示数据</span>
+        </button>
+        <button id="btn-purge-demo" class="nav-item w-full" title="删除全部演示数据，保留你自己的数据">
+          <span class="nav-ico text-[12px]">🧹</span><span class="flex-1 text-left text-[12px]">清除演示数据</span>
         </button>
         <button id="btn-shortcuts" class="nav-item w-full" title="查看快捷键">
           <span class="nav-ico text-[12px]">⌘</span><span class="flex-1 text-left text-[12px]">快捷键说明</span>
@@ -69,6 +72,7 @@
         <span id="save-text">已保存 · 本地</span>
       </div>
       <div class="mt-0.5 text-[9.5px] text-mute/70">localStorage + IndexedDB 双写</div>
+      <div id="storage-info" class="mt-0.5 truncate text-[9.5px] text-mute/70" title=""></div>
     </div>
   </aside>
 

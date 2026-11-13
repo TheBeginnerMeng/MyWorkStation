@@ -81,6 +81,7 @@
       // 侧栏统计
       renderSidebarStats();
       renderSaveIndicator();
+      renderStorageInfo();
 
       // 右栏生成结果
       global.OpsDesk.RightPanel.render();
@@ -202,24 +203,78 @@
     input.click();
   }
 
-  function resetData() {
+  /**
+   * 追加演示数据：只新增演示记录，不动用户已有的真实数据
+   * 演示数据全部带 demo 标记，可用「清除演示数据」一键移除
+   */
+  function loadDemo() {
+    var added = Store.appendDemo();
+    render();
+    U.toast(
+      '已载入演示数据：任务 ' + added.tasks + ' · 故障 ' + added.incidents +
+      ' · 流水 ' + added.timeLogs + ' · 版本 ' + added.releases +
+      ' · 取数单 ' + added.queries + '（可随时「清除演示数据」）',
+      'success',
+      4000
+    );
+  }
+
+  /** 清除全部演示数据，保留用户自己的数据 */
+  function purgeDemo() {
+    var c = Store.demoStats();
+    if (!c.total) {
+      U.toast('当前没有演示数据', 'warn');
+      return;
+    }
+    var detail = [];
+    if (c.tasks) detail.push('任务 ' + c.tasks + ' 条');
+    if (c.incidents) detail.push('故障 ' + c.incidents + ' 条');
+    if (c.timeLogs) detail.push('流水 ' + c.timeLogs + ' 条');
+    if (c.releases) detail.push('版本 ' + c.releases + ' 个');
+    if (c.queries) detail.push('取数单 ' + c.queries + ' 单');
+    if (c.projects) detail.push('演示项目 ' + c.projects + ' 个');
     UI.confirm(
-      '重置为演示数据',
-      '这会清除当前所有本地数据，并恢复为内置 Demo 数据。建议先导出备份。是否继续？',
+      '清除演示数据',
+      '将删除以下演示数据：' + detail.join(' / ') + '。你自己的数据不受影响，此操作不可撤销。',
       function () {
-        var fresh = global.OpsDesk.Seed.normalize(global.OpsDesk.Seed.build());
-        Store.mutate(function () {
-          Object.keys(Store.state).forEach(function (k) {
-            delete Store.state[k];
-          });
-          Object.assign(Store.state, fresh);
-        }, 'reset');
-        applyTheme(Store.state.settings.theme);
+        var r = Store.purgeDemo();
         render();
-        U.toast('已重置为演示数据', 'success');
+        U.toast(
+          '已清除演示数据：任务 ' + r.tasks + ' · 故障 ' + r.incidents +
+          ' · 流水 ' + r.timeLogs + ' · 版本 ' + r.releases + ' · 取数单 ' + r.queries,
+          'success'
+        );
       },
       true
     );
+  }
+
+  /**
+   * 侧栏存储空间指示
+   * 数据存在「当前地址」对应的浏览器存储里，换浏览器 / 换端口 / 换目录就是另一个空间，
+   * 把这里显示出来，用户才能判断「我的数据去哪了」
+   */
+  function renderStorageInfo() {
+    var el = U.$('#storage-info');
+    if (!el) return;
+    var p = global.OpsDesk.Storage.probe();
+    var origin = p.origin || '';
+    if (!origin || origin === 'null') {
+      origin = 'file:// 本地文件（按目录分区）';
+    }
+    if (!p.localStorage && !p.indexedDB) {
+      el.className = 'mt-0.5 truncate text-[9.5px] text-danger';
+      el.textContent = '⚠ 本地存储不可用，数据无法保存';
+      el.title = 'localStorage 与 IndexedDB 都不可用，请检查浏览器隐私设置或站点数据权限';
+      return;
+    }
+    el.className = 'mt-0.5 truncate text-[9.5px] text-mute/70';
+    el.textContent = origin;
+    el.title =
+      '当前存储空间：' + origin +
+      '\nlocalStorage ' + (p.localStorage ? '可用' : '不可用') +
+      ' · IndexedDB ' + (p.indexedDB ? '可用' : '不可用') +
+      '\n换浏览器 / 换端口 / 换目录都会变成另一个空间，数据不会互通';
   }
 
   function showShortcuts() {
@@ -393,7 +448,8 @@
     });
     U.$('#btn-export').addEventListener('click', exportData);
     U.$('#btn-import').addEventListener('click', importData);
-    U.$('#btn-reset').addEventListener('click', resetData);
+    U.$('#btn-demo').addEventListener('click', loadDemo);
+    U.$('#btn-purge-demo').addEventListener('click', purgeDemo);
     U.$('#btn-shortcuts').addEventListener('click', showShortcuts);
 
     // 右栏：复制 / 重新生成
@@ -432,11 +488,23 @@
       if (!RENDERERS[activeView]) activeView = 'dashboard';
       render();
 
-      // 首次访问提示
-      if (res.source === 'none') {
+      // 空白启动提示（不再自动灌入演示数据）
+      if (res.blank) {
         setTimeout(function () {
-          U.toast('已载入内置演示数据，可直接体验各模块', 'success', 3200);
+          U.toast(
+            '已创建空白工作台（不含演示数据）。想先看示例？左下角点「⊞ 载入演示数据」',
+            'warn',
+            4200
+          );
         }, 600);
+      }
+
+      // 存储不可用告警：否则用户会以为数据已保存，下次打开全没了
+      var probe = global.OpsDesk.Storage.probe();
+      if (!probe.localStorage && !probe.indexedDB) {
+        setTimeout(function () {
+          U.toast('本地存储不可用，本次录入的数据不会被保存，请检查浏览器隐私设置', 'error', 6000);
+        }, 1200);
       }
 
       // 跨天自动刷新
@@ -482,7 +550,8 @@
     toggleTheme: toggleTheme,
     exportData: exportData,
     importData: importData,
-    resetData: resetData,
+    loadDemo: loadDemo,
+    purgeDemo: purgeDemo,
     showShortcuts: showShortcuts,
     /** 初始化完成的 Promise（便于测试与外部集成等待） */
     ready: readyPromise,
