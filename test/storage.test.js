@@ -141,18 +141,45 @@ test('存储：importJSON 对非法内容应抛错而非静默失败', () => {
   }
 });
 
-test('存储：初始化后数据应真正落盘，刷新可恢复', async () => {
+test('存储：空白启动不应写盘占位，也不应灌入演示数据', async () => {
   const env = createEnv();
   try {
     await env.Store.init();
     await sleep(200);
+    // 故意不写盘：否则「空的」状态会占住 key，
+    // 下次启动会误判成「有数据」，也可能在数据损坏时把它冲掉
+    const raw = env.window.localStorage.getItem('opsdesk:state:v1');
+    assert.equal(raw, null, '空白启动不应写入占位数据');
+    assert.equal(env.Store.state.tasks.length, 0, '启动不应自动灌入演示任务');
+    assert.equal(env.Store.state.projects.length, 1, '应保留一个默认项目');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('存储：用户产生第一次编辑后应真正落盘，刷新可恢复', async () => {
+  const env = createEnv();
+  try {
+    await env.Store.init();
+    env.Store.mutate((s) => {
+      s.tasks.push({
+        id: 'tsk_real_1',
+        title: '我的真实任务',
+        project: s.projects[0].id,
+        date: env.Utils.today(),
+        startTime: '09:00',
+        endTime: '10:00',
+        status: 'todo',
+        priority: 'P2',
+      });
+    }, 'test');
+    await sleep(200);
+
     const raw = env.window.localStorage.getItem('opsdesk:state:v1');
     assert.ok(raw, '状态未写入 localStorage');
     const parsed = JSON.parse(raw);
     assert.ok(Array.isArray(parsed.tasks), '落盘数据中 tasks 非法');
-    assert.ok(parsed.projects.length > 0, '落盘数据中项目为空');
-    // 启动不再自动灌入演示数据
-    assert.equal(parsed.tasks.length, 0, '启动不应自动灌入演示任务');
+    assert.equal(parsed.tasks.length, 1, '真实任务应被保存');
     assert.ok(!parsed.tasks.some((t) => t.demo), '落盘数据不应含演示记录');
   } finally {
     env.cleanup();

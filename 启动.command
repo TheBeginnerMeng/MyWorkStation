@@ -105,7 +105,7 @@ else
 fi
 echo ""
 echo "  · 数据保存在本机浏览器（localStorage + IndexedDB 双写）"
-echo "  · 换电脑请用左栏「导出备份 / 导入备份」迁移数据"
+echo "  · 并自动备份到同目录 opsdesk-data.json（换电脑连同文件夹一起拷即可）"
 echo "  · 按 Control + C 结束服务"
 echo ""
 

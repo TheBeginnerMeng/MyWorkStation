@@ -105,14 +105,19 @@
 
   /* ---------------- Confirm ---------------- */
 
-  UI.confirm = function (title, message, onYes, danger) {
+  /**
+   * 确认框
+   * @param danger  true = 危险操作（红色按钮）
+   * @param okLabel 确认按钮文案（可选，默认 danger 时为「确认删除」）
+   */
+  UI.confirm = function (title, message, onYes, danger, okLabel) {
     var btn = U.el('button', {
       class: 'btn ' + (danger ? 'btn-danger' : 'btn-primary') + ' btn-lg',
       onclick: function () {
         m.close();
         onYes && onYes();
       },
-    }, [danger ? '确认删除' : '确认']);
+    }, [okLabel || (danger ? '确认删除' : '确认')]);
 
     var m = UI.modal({
       title: title,

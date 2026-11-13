@@ -148,6 +148,10 @@
     } else if (ss.error) {
       text = '保存异常';
       color = 'var(--c-danger)';
+    } else if (ss.degraded) {
+      // 只写进了一侧：数据还在，但必须让用户知道有降级风险
+      text = ss.idb ? '仅 IndexedDB' : '仅 localStorage';
+      color = 'var(--c-warn)';
     }
     els.saveDot.style.background = color;
     els.saveText.textContent = text + ' · ' + (ss.lastSavedAt ? U.relTime(ss.lastSavedAt) : '本地');
@@ -262,6 +266,11 @@
     if (!origin || origin === 'null') {
       origin = 'file:// 本地文件（按目录分区）';
     }
+    var fb = Store.fileBackupState || {};
+    var fbText = fb.supported
+      ? (fb.lastOk === true ? '目录备份 ✓' : fb.lastOk === false ? '目录备份 ✗' : '目录备份 ·')
+      : '目录备份不可用（未用本地服务启动）';
+
     if (!p.localStorage && !p.indexedDB) {
       el.className = 'mt-0.5 truncate text-[9.5px] text-danger';
       el.textContent = '⚠ 本地存储不可用，数据无法保存';
@@ -269,12 +278,151 @@
       return;
     }
     el.className = 'mt-0.5 truncate text-[9.5px] text-mute/70';
-    el.textContent = origin;
+    el.textContent = origin + ' · ' + fbText;
     el.title =
       '当前存储空间：' + origin +
       '\nlocalStorage ' + (p.localStorage ? '可用' : '不可用') +
       ' · IndexedDB ' + (p.indexedDB ? '可用' : '不可用') +
+      ' · ' + fbText +
       '\n换浏览器 / 换端口 / 换目录都会变成另一个空间，数据不会互通';
+  }
+
+  /* ---------------- 存储与数据诊断 ---------------- */
+
+  /**
+   * 统计一个状态里的「真实记录」条数（排除演示数据与默认占位项目）
+   */
+  function countRealRecords(state) {
+    if (!state || typeof state !== 'object') return 0;
+    var keys = ['tasks', 'incidents', 'timeLogs', 'releases', 'queries'];
+    var n = 0;
+    for (var i = 0; i < keys.length; i++) {
+      var arr = state[keys[i]];
+      if (!Array.isArray(arr)) continue;
+      for (var j = 0; j < arr.length; j++) {
+        if (!arr[j] || arr[j].demo !== true) n++;
+      }
+    }
+    return n;
+  }
+
+  /**
+   * 打开「存储与数据诊断」面板
+   * 目的：让用户自己一眼看清「数据在哪、有几份、会不会丢」，而不是靠猜。
+   */
+  function openDiagnostics() {
+    var Storage = global.OpsDesk.Storage;
+    var probe = Storage.probe();
+    var origin = probe.origin || '（未知）';
+    if (origin === 'null') origin = 'file:// 本地文件';
+
+    var rows = [];
+
+    function row(label, value, tone) {
+      rows.push(U.el('div', { class: 'flex items-start justify-between gap-3 border-b border-line/40 py-2 last:border-b-0' }, [
+        U.el('span', { class: 'text-[12px] text-dim', text: label }),
+        U.el('span', {
+          class: 'text-[12px] text-right',
+          style: { color: tone || 'var(--c-text)', whiteSpace: 'pre-wrap' },
+          text: value,
+        }),
+      ]));
+    }
+
+    row('当前存储空间', origin, probe.localStorage || probe.indexedDB ? 'var(--c-ok)' : 'var(--c-danger)');
+    row('localStorage', probe.localStorage ? '可写' : '不可写', probe.localStorage ? 'var(--c-ok)' : 'var(--c-danger)');
+    row('IndexedDB', probe.indexedDB ? '可用' : '不可用', probe.indexedDB ? 'var(--c-ok)' : 'var(--c-danger)');
+
+    var s = Store.state;
+    row('浏览器内记录数',
+      (s.projects || []).length + ' 项目 / ' + (s.tasks || []).length + ' 任务 / ' +
+      (s.incidents || []).length + ' 故障 / ' + (s.timeLogs || []).length + ' 流水 / ' +
+      ((s.releases || []).length) + ' 投产 / ' + ((s.queries || []).length) + ' 取数单');
+
+    var fbState = Store.fileBackupState || {};
+    row('目录备份文件', fbState.supported
+      ? (fbState.lastOk === true ? '已同步 ✓' : fbState.lastOk === false ? '同步失败 ✗' : '尚未同步')
+      : '不可用（需用启动脚本 / 本地服务打开）',
+      fbState.supported && fbState.lastOk !== false ? 'var(--c-ok)' : 'var(--c-warn)');
+
+    var body = U.el('div', { class: 'text-[12px] leading-relaxed' }, rows);
+    body.appendChild(U.el('p', {
+      class: 'mt-3 text-[11px] leading-relaxed text-mute',
+      text: '说明：浏览器存储按「地址」隔离 —— 换浏览器、换端口、换目录都会切到另一个空间。' +
+        '程序目录里的 opsdesk-data.json 会跟着文件夹走，换电脑时连同文件夹一起拷贝即可带走数据。',
+    }));
+
+    var host = U.$('#modal-host');
+    if (!host) return;
+    host.innerHTML = '';
+    var panel = U.el('div', { class: 'panel w-full overflow-hidden shadow-lift max-w-lg' }, [
+      U.el('div', { class: 'panel-head bg-raised/40' }, [
+        U.el('div', {}, [U.el('div', { class: 'panel-title', text: '存储与数据诊断' })]),
+        U.el('button', { class: 'btn btn-ghost btn-icon', 'aria-label': '关闭', text: '✕', onclick: function () { host.innerHTML = ''; } }),
+      ]),
+      U.el('div', { class: 'px-4 py-3', style: { maxHeight: '62vh', overflowY: 'auto' } }, [body]),
+      U.el('div', { class: 'flex items-center justify-end gap-2 border-t border-line/60 bg-raised/30 px-4 py-3' }, [
+        U.el('button', {
+          class: 'btn btn-lg',
+          text: '导出诊断报告',
+          onclick: function () {
+            var report = {
+              app: 'opsdesk',
+              checkedAt: new Date().toISOString(),
+              origin: origin,
+              probe: probe,
+              browserRecords: {
+                projects: (s.projects || []).length,
+                tasks: (s.tasks || []).length,
+                incidents: (s.incidents || []).length,
+                timeLogs: (s.timeLogs || []).length,
+                releases: (s.releases || []).length,
+                queries: (s.queries || []).length,
+              },
+              fileBackup: fbState,
+            };
+            var blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = U.el('a', { href: url, download: 'opsdesk-diagnostic-' + U.today() + '.json' });
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            U.toast('诊断报告已导出', 'success');
+          },
+        }),
+        U.el('button', {
+          class: 'btn btn-lg',
+          text: '检查目录备份',
+          onclick: function () {
+            Store.checkFileBackup().then(function (fb) {
+              if (!fb || !fb.available) {
+                U.toast(fb && fb.supported === false
+                  ? '当前未通过本地服务打开，无法使用目录备份'
+                  : '程序目录里还没有备份文件（首次保存后会自动生成）', 'warn', 4000);
+                return;
+              }
+              UI.confirm(
+                '目录备份文件',
+                '程序目录里有一份备份：' + (fb.realRecords != null ? fb.realRecords : fb.records) + ' 条真实记录' +
+                (fb.newerThanBrowser ? '，且比当前浏览器里的数据更新。' : '。') +
+                '是否用它覆盖当前数据？',
+                function () {
+                  Store.restoreFromFileBackup(fb.state);
+                  applyTheme(Store.state.settings.theme || 'dark');
+                  render();
+                  U.toast('已从目录备份恢复', 'success');
+                },
+                true,
+                '恢复并覆盖'
+              );
+            });
+          },
+        }),
+        U.el('button', { class: 'btn btn-primary btn-lg', text: '知道了', onclick: function () { host.innerHTML = ''; } }),
+      ]),
+    ]);
+    host.appendChild(panel);
   }
 
   function showShortcuts() {
@@ -451,6 +599,8 @@
     U.$('#btn-demo').addEventListener('click', loadDemo);
     U.$('#btn-purge-demo').addEventListener('click', purgeDemo);
     U.$('#btn-shortcuts').addEventListener('click', showShortcuts);
+    var btnDiag = U.$('#btn-diag');
+    if (btnDiag) btnDiag.addEventListener('click', openDiagnostics);
 
     // 右栏：复制 / 重新生成
     U.$('#right-copy').addEventListener('click', function () {
@@ -499,6 +649,19 @@
         }, 600);
       }
 
+      // 本地数据损坏告警：绝不能让用户以为"数据被删了"，必须明确告知
+      var diag = res.diagnostics || {};
+      if (diag.localCorrupted) {
+        setTimeout(function () {
+          U.toast(
+            '检测到本地数据读取异常，已把原始内容另存为副本（localStorage 的 opsdesk:corrupt:v1）' +
+            (diag.corruptSaved ? '，可点「存储与数据诊断」导出抢救' : ''),
+            'error',
+            8000
+          );
+        }, 1000);
+      }
+
       // 存储不可用告警：否则用户会以为数据已保存，下次打开全没了
       var probe = global.OpsDesk.Storage.probe();
       if (!probe.localStorage && !probe.indexedDB) {
@@ -506,6 +669,47 @@
           U.toast('本地存储不可用，本次录入的数据不会被保存，请检查浏览器隐私设置', 'error', 6000);
         }, 1200);
       }
+
+      // 目录级备份自检：浏览器存储被清 / 换了空间时，从同目录的备份文件恢复
+      Store.checkFileBackup().then(function (fb) {
+        renderStorageInfo();
+        if (!fb || !fb.available || !fb.state) return;
+
+        var browserReal = countRealRecords(Store.state);
+        var fileReal = countRealRecords(fb.state);
+
+        // 浏览器里没有真实数据（空 / 只剩演示数据），而目录备份里有真实数据
+        // → 主动提示恢复。这正是「重启后数据被测试数据顶掉」的补救路径
+        if (browserReal === 0 && fileReal > 0) {
+          UI.confirm(
+            '发现目录里的真实数据备份',
+            '当前浏览器空间里没有你的真实记录' +
+            (Store.demoStats().tasks ? '（只剩演示数据）' : '') +
+            '，但程序目录里有一份含 ' + fileReal + ' 条真实记录的备份。' +
+            '这通常是因为换了浏览器、换了端口或换了目录。是否用这份备份恢复？',
+            function () {
+              Store.restoreFromFileBackup(fb.state);
+              applyTheme(Store.state.settings.theme || 'dark');
+              render();
+              U.toast('已从目录备份恢复 ' + fileReal + ' 条真实记录', 'success');
+            },
+            true,
+            '恢复并覆盖'
+          );
+          return;
+        }
+
+        // 目录备份比浏览器里的新 → 提示可以取回更新的那份
+        if (!res.blank && fb.newerThanBrowser) {
+          setTimeout(function () {
+            U.toast(
+              '程序目录里有一份更新的数据备份，可点「存储与数据诊断」查看并取回',
+              'warn',
+              6000
+            );
+          }, 1500);
+        }
+      });
 
       // 跨天自动刷新
       var day = U.today();
@@ -525,8 +729,10 @@
     //     （否则新建/编辑/删除任务、故障、流水后界面不会刷新，
     //       用户会误以为没保存成功）
     Store.subscribe(function (s, reason) {
-      if (reason === 'persist:done' || reason === 'persist:error' || reason === 'persist:start') {
+      if (reason === 'persist:done' || reason === 'persist:error' || reason === 'persist:start' ||
+          reason === 'persist:degraded' || reason === 'filebackup:sync') {
         renderSaveIndicator();
+        renderStorageInfo();
         return;
       }
       if (reason === 'view') return; // 切换视图由 go() 自行重绘
@@ -552,6 +758,7 @@
     importData: importData,
     loadDemo: loadDemo,
     purgeDemo: purgeDemo,
+    openDiagnostics: openDiagnostics,
     showShortcuts: showShortcuts,
     /** 初始化完成的 Promise（便于测试与外部集成等待） */
     ready: readyPromise,

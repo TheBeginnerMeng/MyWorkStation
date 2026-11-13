@@ -9,6 +9,11 @@ package-lock.json
 opsdesk-backup-*.json
 *.backup.json
 *backup*.json
+# 目录级数据备份：程序运行时自动生成，含用户的真实工作数据，绝不入库
+opsdesk-data.json
+opsdesk-data.json.tmp
+# 诊断报告导出
+opsdesk-diagnostic-*.json
 data/
 *.local.json
 .env

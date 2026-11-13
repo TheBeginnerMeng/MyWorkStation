@@ -56,6 +56,7 @@ function createEnv(opts = {}) {
     <div id="btn-import"></div>
     <div id="btn-demo"></div>
     <div id="btn-purge-demo"></div>
+    <div id="btn-diag"></div>
     <div id="btn-shortcuts"></div>
     <div id="storage-info"></div>
     <div id="right-output"></div>
@@ -149,6 +150,7 @@ function createEnv(opts = {}) {
     OpsDesk: win.OpsDesk,
     Utils: win.OpsDesk.Utils,
     Storage: win.OpsDesk.Storage,
+    FileBackup: win.OpsDesk.FileBackup,
     Seed: win.OpsDesk.Seed,
     Store: win.OpsDesk.Store,
     UI: win.OpsDesk.UI,

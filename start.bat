@@ -38,5 +38,6 @@ goto :done
 :done
 echo.
 echo   . 服务已结束。按任意键关闭此窗口。
+echo   . 数据同时备份在同目录 opsdesk-data.json，换电脑连同文件夹一起拷即可。
 pause >nul
 exit /b 0

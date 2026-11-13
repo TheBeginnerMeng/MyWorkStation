@@ -14,7 +14,7 @@
   var listeners = [];
   var state = null;
   var saveTimer = null;
-  var saveStatus = { pending: false, lastSavedAt: 0, error: null };
+  var saveStatus = { pending: false, lastSavedAt: 0, error: null, degraded: false, ls: false, idb: false };
 
   /* ---------------- 订阅 ---------------- */
 
@@ -45,7 +45,12 @@
       saveStatus.pending = false;
       saveStatus.lastSavedAt = Date.now();
       saveStatus.error = res.error || null;
-      emit(res.ok ? 'persist:done' : 'persist:error');
+      saveStatus.degraded = !!res.degraded;
+      saveStatus.ls = !!res.ls;
+      saveStatus.idb = !!res.idb;
+      emit(res.ok ? (res.degraded ? 'persist:degraded' : 'persist:done') : 'persist:error');
+      /* 浏览器存储只是缓存，目录里的文件备份才是跟着程序走的最后保险 */
+      if (res.ok) syncFileBackupSoon();
     });
   }
 
@@ -67,17 +72,110 @@
   function init() {
     return Storage.load().then(function (res) {
       var raw = res.state;
+      var diagnostics = res.diagnostics || {};
       if (!raw) {
         // 当前存储空间没有数据 → 空白工作台（只留一个默认项目）
+        // 注意：**绝不播种演示数据**，也**不在此处写盘** ——
+        // 写盘会把「空的」状态占住，让下一次启动误判成「有数据」。
         state = Seed.normalize(Seed.blank());
-        persist();
-        return { state: state, source: res.source, blank: true };
+        return {
+          state: state,
+          source: res.source,
+          blank: true,
+          diagnostics: diagnostics,
+        };
       }
       state = Seed.normalize(raw);
       state.updatedAt = Date.now();
       if (res.source === 'indexedDB') persist();
-      return { state: state, source: res.source, blank: false };
+      return {
+        state: state,
+        source: res.source,
+        blank: false,
+        diagnostics: diagnostics,
+      };
     });
+  }
+
+  /* ---------------- 目录级文件备份 ---------------- */
+
+  var fileSyncTimer = null;
+  var fileSyncState = { supported: false, lastAt: 0, lastOk: null, error: null };
+
+  /** 立即把当前状态写回程序目录下的 opsdesk-data.json */
+  function syncFileBackup() {
+    var FB = global.OpsDesk.FileBackup;
+    if (!FB || !FB.supported) {
+      fileSyncState.supported = false;
+      return Promise.resolve({ ok: false, unsupported: true });
+    }
+    fileSyncState.supported = true;
+    return FB.save(state).then(function (ok) {
+      fileSyncState.lastAt = Date.now();
+      fileSyncState.lastOk = ok;
+      fileSyncState.error = ok ? null : '写入失败';
+      emit('filebackup:sync');
+      return { ok: ok };
+    });
+  }
+
+  /** 合并短时间内的多次写入，避免频繁落盘 */
+  function syncFileBackupSoon() {
+    if (fileSyncTimer) clearTimeout(fileSyncTimer);
+    fileSyncTimer = setTimeout(function () {
+      fileSyncTimer = null;
+      syncFileBackup();
+    }, 2000);
+  }
+
+  /**
+   * 读取程序目录下的备份文件
+   * 返回 { available, state, mtime, newerThanBrowser }
+   */
+  function checkFileBackup() {
+    var FB = global.OpsDesk.FileBackup;
+    if (!FB || !FB.supported) {
+      fileSyncState.supported = false;
+      return Promise.resolve({ available: false, supported: false });
+    }
+    fileSyncState.supported = true;
+    return FB.load().then(function (res) {
+      if (!res) return { available: false, supported: true };
+      var browserAt = (state && state.updatedAt) || 0;
+      var real = 0;
+      ['tasks', 'incidents', 'timeLogs', 'releases', 'queries'].forEach(function (k) {
+        (res.state[k] || []).forEach(function (r) {
+          if (!r || r.demo !== true) real++;
+        });
+      });
+      return {
+        available: true,
+        supported: true,
+        state: res.state,
+        mtime: res.mtime,
+        bytes: res.bytes,
+        records: (res.state && res.state.tasks ? res.state.tasks.length : 0),
+        realRecords: real,
+        newerThanBrowser: !!res.mtime && res.mtime * 1000 > browserAt,
+      };
+    });
+  }
+
+  /** 用目录备份文件里的数据整体替换当前状态 */
+  function restoreFromFileBackup(fileState) {
+    var normalized = Seed.normalize(fileState);
+    mutate(function (s) {
+      Object.keys(s).forEach(function (k) {
+        delete s[k];
+      });
+      Object.assign(s, normalized);
+      if (!s.projects.length) {
+        var def = Seed.normalize(Seed.blank());
+        s.projects = def.projects;
+        s.settings.focusProjectId = def.settings.focusProjectId;
+      }
+    }, 'file:restore');
+    return state;
   }
 
   /* ---------------- 演示数据管理 ---------------- */
@@ -432,6 +530,13 @@
     appendDemo: appendDemo,
     purgeDemo: purgeDemo,
     demoStats: demoStats,
+    syncFileBackup: syncFileBackup,
+    syncFileBackupSoon: syncFileBackupSoon,
+    checkFileBackup: checkFileBackup,
+    restoreFromFileBackup: restoreFromFileBackup,
+    get fileBackupState() {
+      return fileSyncState;
+    },
     get state() {
       return state;
     },
