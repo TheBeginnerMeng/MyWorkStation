@@ -187,6 +187,37 @@ test('外壳：点击遮罩应关闭弹窗', async () => {
   }
 });
 
+test('外壳：存储与数据诊断面板必须带遮罩层（否则面板在视口外，用户看不到）', async () => {
+  const env = await createSeededEnv();
+  try {
+    const { App } = env.OpsDesk;
+    App.openDiagnostics();
+
+    // 回归点：曾经把面板直接塞进 #modal-host，没有 fixed 遮罩层，
+    // DOM 里查得到但视觉上完全不可见 —— 用户表现为"点击没反应"
+    const overlay = env.document.querySelector('#modal-host > div');
+    assert.ok(overlay, '诊断面板缺少遮罩层');
+    assert.ok(overlay.className.includes('fixed'), '遮罩层必须是 fixed 定位');
+    assert.ok(overlay.className.includes('inset-0'), '遮罩层必须铺满视口');
+
+    const panel = env.document.querySelector('#modal-host .panel');
+    assert.ok(panel, '诊断面板未打开');
+    assert.ok(/存储与数据诊断/.test(panel.textContent), '面板标题不对');
+    assert.ok(/当前存储空间/.test(panel.textContent), '缺少存储空间信息');
+    assert.ok(/localStorage/.test(panel.textContent), '缺少 localStorage 状态');
+    assert.ok(/IndexedDB/.test(panel.textContent), '缺少 IndexedDB 状态');
+    assert.ok(/目录备份文件/.test(panel.textContent), '缺少目录备份状态');
+
+    // 「知道了」应能正常关闭
+    const okBtn = Array.from(panel.querySelectorAll('button')).find((b) => b.textContent.trim() === '知道了');
+    assert.ok(okBtn, '缺少「知道了」按钮');
+    okBtn.click();
+    assert.equal(env.document.querySelector('#modal-host .panel'), null, '点击「知道了」未关闭面板');
+  } finally {
+    env.cleanup();
+  }
+});
+
 test('UI：环形图应按数据渲染出对应数量的扇区', async () => {
   const env = await createEnv();
   try {

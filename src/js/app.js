@@ -352,16 +352,12 @@
         '程序目录里的 opsdesk-data.json 会跟着文件夹走，换电脑时连同文件夹一起拷贝即可带走数据。',
     }));
 
-    var host = U.$('#modal-host');
-    if (!host) return;
-    host.innerHTML = '';
-    var panel = U.el('div', { class: 'panel w-full overflow-hidden shadow-lift max-w-lg' }, [
-      U.el('div', { class: 'panel-head bg-raised/40' }, [
-        U.el('div', {}, [U.el('div', { class: 'panel-title', text: '存储与数据诊断' })]),
-        U.el('button', { class: 'btn btn-ghost btn-icon', 'aria-label': '关闭', text: '✕', onclick: function () { host.innerHTML = ''; } }),
-      ]),
-      U.el('div', { class: 'px-4 py-3', style: { maxHeight: '62vh', overflowY: 'auto' } }, [body]),
-      U.el('div', { class: 'flex items-center justify-end gap-2 border-t border-line/60 bg-raised/30 px-4 py-3' }, [
+    var m = UI.modal({
+      title: '存储与数据诊断',
+      subtitle: '数据存在哪 · 有几份 · 会不会丢',
+      width: 'max-w-lg',
+      body: body,
+      footer: [
         U.el('button', {
           class: 'btn btn-lg',
           text: '导出诊断报告',
@@ -419,10 +415,13 @@
             });
           },
         }),
-        U.el('button', { class: 'btn btn-primary btn-lg', text: '知道了', onclick: function () { host.innerHTML = ''; } }),
-      ]),
-    ]);
-    host.appendChild(panel);
+        U.el('button', {
+          class: 'btn btn-primary btn-lg',
+          text: '知道了',
+          onclick: function () { m.close(); },
+        }),
+      ],
+    });
   }
 
   function showShortcuts() {
